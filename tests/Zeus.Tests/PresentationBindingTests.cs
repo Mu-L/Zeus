@@ -281,6 +281,32 @@ public sealed class PresentationBindingTests
     }
 
     /// <summary>
+    /// host.Bind 只传一次调度器，通道和点投影都应复用它；释放上下文后不再更新。
+    /// </summary>
+    [Fact]
+    public async Task BindContext_ReusesDispatcherAndDisposesOwnedSources()
+    {
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddAcquisition(TimeSpan.FromMilliseconds(50));
+            builder.AddVirtualChannel("bus", new ModbusSlaveResponder(1, ModbusTransport.Rtu, new ModbusSlaveMemory()));
+            builder.AddModbusRtu("oven", "bus", unitId: 1, points: map =>
+                map.HoldingRegister("temperature", 0, 0.1));
+        });
+
+        using var ui = host.Bind(ImmediateUiDispatcher.Instance);
+        var bus = ui.Channel("bus");
+        var temperature = ui.Point("temperature", value => $"{value:0.0}");
+
+        await host.StartAsync();
+        Assert.Equal("bus", bus.Name);
+        Assert.Equal("temperature", temperature.Name);
+
+        ui.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => ui.Channel("bus"));
+    }
+
+    /// <summary>
     /// 测试用调度器：可切换是否拥有界面线程，并统计 Post 次数。
     /// </summary>
     private sealed class RecordingDispatcher : IUiDispatcher

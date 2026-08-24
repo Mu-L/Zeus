@@ -112,4 +112,19 @@ namespace Zeus
     {
         public static Zeus.UiHostAttachment AttachManually(this Zeus.IZeusHost host) { }
     }
+    public sealed class ZeusBindingContext : System.IDisposable
+    {
+        public ZeusBindingContext(Zeus.IZeusHost host, Zeus.IUiDispatcher dispatcher) { }
+        public Zeus.IUiDispatcher Dispatcher { get; }
+        public Zeus.IZeusHost Host { get; }
+        public Zeus.PointAlarmBindingSource Alarms() { }
+        public Zeus.ChannelBindingSource Channel(string name) { }
+        public void Dispose() { }
+        public Zeus.PointBindingSource Point(string name, System.Func<object?, string>? formatter = null) { }
+        public Zeus.PointTableBindingSource Table() { }
+    }
+    public static class ZeusBindingContextExtensions
+    {
+        public static Zeus.ZeusBindingContext Bind(this Zeus.IZeusHost host, Zeus.IUiDispatcher dispatcher) { }
+    }
 }
