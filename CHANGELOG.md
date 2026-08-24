@@ -6,8 +6,8 @@
 
 ### 包含
 
-- 模板：新增 `Zeus.Templates`，提供 `dotnet new zeus-console` / `zeus-winforms` / `zeus-wpf` / `zeus-modbus`
-- 模板：新增 `Zeus.Templates`。控制台引用 `Zeus.Communications`；JSON 工程再加 `Zeus.Configuration`；桌面再加 `Zeus.Presentation.WinForms` / `Zeus.Presentation.Wpf`。不再提供空的场景元包
+- 模板：新增 `Zeus.Templates`（`zeus-console` / `zeus-winforms` / `zeus-wpf` / `zeus-modbus`）。控制台引用 `Zeus.Communications`；JSON 工程再加 `Zeus.Configuration`；桌面再加 `Zeus.Presentation.WinForms` / `Zeus.Presentation.Wpf`
+- 界面：`host.Bind(dispatcher)` 只传一次调度器，再用 `Channel` / `Point`；不必每个点重复传 `dispatcher`
 - JSON Schema：新增 `https://docs.greekmythology.cn/schemas/zeus.json`，并随 `Zeus.Configuration` 打包，编辑器可补全通道、设备和点字段
 - 报警：`PointAlarmSeverity`；限值可带区域与默认责任人；`Assign` / `Shelve` / `Unshelve` / `Suppress` / `Unsuppress`
 - JSON：`alarmSeverity`、`alarmArea`、`alarmAssignee`
