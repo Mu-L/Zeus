@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Zeus.Communications" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Configuration" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Presentation.WinForms" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Protocols.Modbus" Version="ZEUS_VERSION" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="zeus.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

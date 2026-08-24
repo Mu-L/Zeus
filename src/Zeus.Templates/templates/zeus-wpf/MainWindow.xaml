@@ -1,4 +1,4 @@
-<Window x:Class="Zeus.Samples.Wpf.QuickStart.MainWindow"
+<Window x:Class="Zeus.WpfTemplate.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Zeus WPF QuickStart"

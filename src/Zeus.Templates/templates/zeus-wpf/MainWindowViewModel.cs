@@ -3,11 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Zeus;
 
-namespace Zeus.Samples.Wpf.QuickStart;
+namespace Zeus.WpfTemplate;
 
-/// <summary>
-/// WPF 快速上手 ViewModel。调度器只在 <see cref="IZeusHost.Bind"/> 时传入一次。
-/// </summary>
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly ZeusBindingContext _ui;
@@ -17,9 +14,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(ToggleTemperatureText))]
     private bool _highTemperature;
 
-    /// <summary>
-    /// 创建 ViewModel，并把通道、点投影成可绑定源。
-    /// </summary>
     public MainWindowViewModel(IZeusHost host, IUiDispatcher dispatcher)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -33,27 +27,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Heater = _ui.Point("heater", FormatBoolean);
     }
 
-    /// <summary>虚拟总线通道状态。</summary>
     public ChannelBindingSource Bus { get; }
 
-    /// <summary>炉温。</summary>
     public PointBindingSource Temperature { get; }
 
-    /// <summary>设定值。</summary>
     public PointBindingSource Setpoint { get; }
 
-    /// <summary>加热器线圈。</summary>
     public PointBindingSource Heater { get; }
 
-    /// <summary>切换温度按钮文本。</summary>
     public string ToggleTemperatureText => HighTemperature ? "恢复正常" : "模拟高温";
 
-    /// <inheritdoc />
     public void Dispose() => _ui.Dispose();
 
-    /// <summary>
-    /// 向虚拟从站写保持寄存器 0，下一轮采集刷新界面。
-    /// </summary>
     [RelayCommand]
     private async Task ToggleTemperatureAsync()
     {

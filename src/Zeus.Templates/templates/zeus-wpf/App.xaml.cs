@@ -3,16 +3,12 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Zeus;
 
-namespace Zeus.Samples.Wpf.QuickStart;
+namespace Zeus.WpfTemplate;
 
-/// <summary>
-/// WPF 示例入口。组合根登记宿主、Dispatcher、ViewModel 和窗口。
-/// </summary>
 public partial class App : Application
 {
     private ServiceProvider? _services;
 
-    /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -22,7 +18,6 @@ public partial class App : Application
         MainWindow.Show();
     }
 
-    /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
         _services?.DisposeAsync().AsTask().GetAwaiter().GetResult();

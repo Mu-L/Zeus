@@ -15,6 +15,16 @@ await using var app = ZeusHost.Create(builder =>
 await app.StartAsync();
 ```
 
+最快创建项目：
+
+```bash
+dotnet new install Zeus.Templates
+dotnet new zeus-console -n ZeusCheck
+dotnet new zeus-winforms -n MyPanel
+dotnet new zeus-wpf -n MyPanel.Wpf
+dotnet new zeus-modbus -n MyOven
+```
+
 按功能选择程序集：
 
 | 包 | 用途 |
@@ -39,5 +49,6 @@ await app.StartAsync();
 | [Zeus.Presentation.Abstractions](https://www.nuget.org/packages/Zeus.Presentation.Abstractions) | UI 无关绑定 |
 | [Zeus.Presentation.WinForms](https://www.nuget.org/packages/Zeus.Presentation.WinForms) | WinForms 绑定 |
 | [Zeus.Presentation.Wpf](https://www.nuget.org/packages/Zeus.Presentation.Wpf) | WPF 绑定 |
+| [Zeus.Templates](https://www.nuget.org/packages/Zeus.Templates) | `dotnet new` 项目模板 |
 
 手册：[docs.greekmythology.cn](https://docs.greekmythology.cn)　·　QQ 群：`771421105`

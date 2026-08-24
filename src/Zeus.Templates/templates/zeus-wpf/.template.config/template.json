@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Zeus Contributors",
+  "classifications": [ "Zeus", "WPF", "Desktop", "MVVM", "Industrial" ],
+  "identity": "Zeus.Templates.Wpf",
+  "name": "Zeus WPF QuickStart",
+  "shortName": "zeus-wpf",
+  "sourceName": "Zeus.WpfTemplate",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "zeusVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "ZEUS_VERSION_DEFAULT",
+      "replaces": "ZEUS_VERSION",
+      "description": "要引用的 Zeus NuGet 包版本。"
+    }
+  }
+}

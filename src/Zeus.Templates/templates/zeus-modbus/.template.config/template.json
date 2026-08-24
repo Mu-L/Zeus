@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Zeus Contributors",
+  "classifications": [ "Zeus", "Modbus", "JSON", "Industrial" ],
+  "identity": "Zeus.Templates.Modbus",
+  "name": "Zeus Modbus JSON QuickStart",
+  "shortName": "zeus-modbus",
+  "sourceName": "Zeus.ModbusTemplate",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "zeusVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "ZEUS_VERSION_DEFAULT",
+      "replaces": "ZEUS_VERSION",
+      "description": "要引用的 Zeus NuGet 包版本。"
+    }
+  }
+}

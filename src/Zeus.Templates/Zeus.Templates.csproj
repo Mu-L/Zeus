@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- dotnet new 模板包：把最小控制台、WinForms、WPF 与 JSON/Modbus 项目压成一条命令。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Zeus.Templates</RootNamespace>
+    <AssemblyName>Zeus.Templates</AssemblyName>
+    <PackageId>Zeus.Templates</PackageId>
+    <PackageType>Template</PackageType>
+    <Title>Zeus dotnet new Templates</Title>
+    <Description>Zeus dotnet new 模板：zeus-console、zeus-winforms、zeus-wpf、zeus-modbus。</Description>
+    <PackageDescription>Zeus dotnet new 模板：一条命令创建控制台回显、桌面点表面板或 JSON/Modbus 虚拟从站项目。</PackageDescription>
+    <PackageTags>zeus;dotnet-new;template;templates;console;winforms;wpf;modbus;industrial;scada</PackageTags>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <TemplateSource Include="templates\**\*" Exclude="templates\shared\**;templates\**\bin\**;templates\**\obj\**" />
+    <SharedZeusJson Include="templates\shared\zeus.json" />
+    <Compile Remove="templates\**\*" />
+    <None Remove="templates\**\*" />
+    <EmbeddedResource Remove="templates\**\*" />
+  </ItemGroup>
+
+  <Target Name="PrepareTemplatePackageContent" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <TemplatePackageRoot>$(IntermediateOutputPath)template-content\</TemplatePackageRoot>
+    </PropertyGroup>
+    <RemoveDir Directories="$(TemplatePackageRoot)" />
+    <Copy
+      SourceFiles="@(TemplateSource)"
+      DestinationFiles="@(TemplateSource->'$(TemplatePackageRoot)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(SharedZeusJson)" DestinationFiles="$(TemplatePackageRoot)zeus-modbus\zeus.json" />
+    <Copy SourceFiles="@(SharedZeusJson)" DestinationFiles="$(TemplatePackageRoot)zeus-winforms\zeus.json" />
+    <Copy SourceFiles="@(SharedZeusJson)" DestinationFiles="$(TemplatePackageRoot)zeus-wpf\zeus.json" />
+    <ItemGroup>
+      <GeneratedTemplateManifest Include="$(TemplatePackageRoot)**\.template.config\template.json" />
+      <Content Include="$(TemplatePackageRoot)**\*" Pack="true" PackagePath="content\%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+    <WriteLinesToFile
+      File="%(GeneratedTemplateManifest.FullPath)"
+      Lines="$([System.IO.File]::ReadAllText('%(GeneratedTemplateManifest.FullPath)').Replace('ZEUS_VERSION_DEFAULT', '$(Version)'))"
+      Overwrite="true" />
+  </Target>
+
+</Project>

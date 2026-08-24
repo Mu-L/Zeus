@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Zeus Contributors",
+  "classifications": [ "Zeus", "Console", "Industrial" ],
+  "identity": "Zeus.Templates.Console",
+  "name": "Zeus Console QuickStart",
+  "shortName": "zeus-console",
+  "sourceName": "Zeus.ConsoleTemplate",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "zeusVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "ZEUS_VERSION_DEFAULT",
+      "replaces": "ZEUS_VERSION",
+      "description": "要引用的 Zeus NuGet 包版本。"
+    }
+  }
+}

@@ -41,6 +41,23 @@
 
 ## 🚀 快速开始
 
+第一次只想确认环境，直接用模板：
+
+```bash
+dotnet new install Zeus.Templates
+dotnet new zeus-console -n ZeusCheck
+cd ZeusCheck
+dotnet run
+```
+
+做桌面或 JSON/Modbus 项目时，也可以直接创建骨架：
+
+```bash
+dotnet new zeus-winforms -n MyPanel
+dotnet new zeus-wpf -n MyPanel.Wpf
+dotnet new zeus-modbus -n MyOven
+```
+
 ```csharp
 await using var app = ZeusHost.Create(builder =>
 {
@@ -92,6 +109,7 @@ DataContext = new MainViewModel(wpfAttachment.Host, WpfUiDispatcher.Current());
 | [Zeus.Presentation.Abstractions](https://www.nuget.org/packages/Zeus.Presentation.Abstractions) | UI 无关绑定 |
 | [Zeus.Presentation.WinForms](https://www.nuget.org/packages/Zeus.Presentation.WinForms) | WinForms 控件绑定 |
 | [Zeus.Presentation.Wpf](https://www.nuget.org/packages/Zeus.Presentation.Wpf) | WPF MVVM 绑定源和 Dispatcher 封送 |
+| [Zeus.Templates](https://www.nuget.org/packages/Zeus.Templates) | `dotnet new zeus-console` / `zeus-winforms` / `zeus-wpf` / `zeus-modbus` |
 
 加入 QQ 群 `771421105` 可与其它使用者交流，二维码见手册 [社区](https://docs.greekmythology.cn/docs/community)。
 

@@ -1,22 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- WPF 快速上手：JSON 点表、虚拟 Modbus 与 MVVM 绑定源。 -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <RootNamespace>Zeus.Samples.Wpf.QuickStart</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Zeus.Communications\Zeus.Communications.csproj" />
-    <ProjectReference Include="..\..\src\Zeus.Configuration\Zeus.Configuration.csproj" />
-    <ProjectReference Include="..\..\src\Zeus.Presentation.Wpf\Zeus.Presentation.Wpf.csproj" />
-    <ProjectReference Include="..\..\src\Zeus.Protocols.Modbus\Zeus.Protocols.Modbus.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <PackageReference Include="Zeus.Communications" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Configuration" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Presentation.Wpf" Version="ZEUS_VERSION" />
+    <PackageReference Include="Zeus.Protocols.Modbus" Version="ZEUS_VERSION" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
   </ItemGroup>

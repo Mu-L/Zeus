@@ -2,14 +2,17 @@
 
 ## 0.19.0
 
-补齐操作员报警队列、面向 ViewModel 的绑定，以及宿主生命周期与窗口解耦。
+补齐操作员报警队列、面向 ViewModel 的绑定，以及宿主生命周期与窗口解耦。同时清掉仍在跑的双路径与旧写法回退。
 
 ### 包含
 
+- 模板：新增 `Zeus.Templates`，提供 `dotnet new zeus-console` / `zeus-winforms` / `zeus-wpf` / `zeus-modbus`
+- 模板：新增 `Zeus.Templates`。控制台引用 `Zeus.Communications`；JSON 工程再加 `Zeus.Configuration`；桌面再加 `Zeus.Presentation.WinForms` / `Zeus.Presentation.Wpf`。不再提供空的场景元包
+- JSON Schema：新增 `https://docs.greekmythology.cn/schemas/zeus.json`，并随 `Zeus.Configuration` 打包，编辑器可补全通道、设备和点字段
 - 报警：`PointAlarmSeverity`；限值可带区域与默认责任人；`Assign` / `Shelve` / `Unshelve` / `Suppress` / `Unsuppress`
 - JSON：`alarmSeverity`、`alarmArea`、`alarmAssignee`
 - 界面：`SynchronizationContextUiDispatcher`、`WpfUiDispatcher.Current`、`PointTableBindingSource`；ViewModel 不必再拿控件取 Dispatcher
-- 生命周期：`UiHostAttachMode.Manual`；`host.AttachZeus()` 不绑窗口。窗口模式仍是默认，适合单窗口演示
+- 生命周期：不绑窗口使用 `host.AttachManually()`；窗口模式仍是默认，适合单窗口演示
 
 ### 行为变化
 
@@ -25,7 +28,12 @@
 - 趋势绑定：删除 `PointHistoryBindingSource`、`BindHistory`、`BindChart`、`BindDashboard`、`AsHistoryBindingSource`、`PointChartSample` 和 `PointDashboardSnapshot`；历史存储与图表序列由业务层订阅 `Changed` / `BatchChanged` 后自行维护
 - 通信追踪：删除 `ChannelTraceFileLogger`；框架只提供 `PacketTraced`、`ChannelTraceBuffer` 和 `ILogger` 结构化日志，文件写入由应用自己决定
 - EtherNet/IP：删除 `AddAllenBradleyEtherNetIp`，统一使用 `AddEtherNetIp`
-- Omron FINS：删除 `AddOmronFinsUdp` / `AddOmronFinsTcp`，统一使用 `AddOmronFins(..., FinsTransport)`
+- Omron FINS：删除 `AddOmronFinsUdp` / `AddOmronFinsTcp`，统一使用 `AddOmronFins(..., FinsTransport)`；JSON 设备类型改为 `omron-fins`，用 `transport`（`udp` / `tcp`）选择封装，不再接受 `omron-fins-udp` / `omron-fins-tcp`
+- JSON：`tcp-server` / `udp-server` 只认 `localPort`，不再把 `port` 当作监听端口
+- 桌面：删除 `UiHostAttachMode` 与 `AttachZeus(..., mode)`；不绑窗口请用 `host.AttachManually()`
+- 配置：删除 `ReloadAcquisition`；改间隔也走 `ReloadAsync`
+- 虚拟从站：`IVirtualResponder` 只保留 `RespondAsync`
+- JSON 绑定：`IZeusJsonBinder.ApplyDevice` 合并为一个方法
 
 ## 0.18.0
 

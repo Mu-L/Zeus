@@ -1,12 +1,8 @@
 using System.Globalization;
 using Zeus;
 
-namespace Zeus.Samples.WinForms.QuickStart;
+namespace Zeus.WinFormsTemplate;
 
-/// <summary>
-/// 最小上位机窗口：从 zeus.json 装载虚拟 Modbus，绑定通道状态、点值和报警。
-/// 现场把 JSON 里的 virtual 通道改成 serial / tcp 即可，不必改窗口代码。
-/// </summary>
 public sealed class MainForm : Form
 {
     private readonly Label _state = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
@@ -19,9 +15,6 @@ public sealed class MainForm : Form
     private readonly ModbusDevice _oven;
     private bool _highTemperature;
 
-    /// <summary>
-    /// 构建界面并挂接 Zeus。点表来自宿主，不是窗口里自建的内存表。
-    /// </summary>
     public MainForm()
     {
         Text = "Zeus WinForms QuickStart";
@@ -30,7 +23,8 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10F);
 
-        Controls.Add(CreateLayout());
+        var layout = CreateLayout();
+        Controls.Add(layout);
 
         var attachment = this.AttachZeus(builder =>
         {
@@ -78,9 +72,6 @@ public sealed class MainForm : Form
         return layout;
     }
 
-    /// <summary>
-    /// 向虚拟从站写保持寄存器 0，下一轮采集会把工程值和报警刷到界面。
-    /// </summary>
     private async Task ToggleTemperatureAsync()
     {
         try
