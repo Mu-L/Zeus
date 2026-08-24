@@ -218,7 +218,7 @@ public static class ZeusHostBuilderConfigurationExtensions
         CancellationToken cancellationToken)
     {
         var name = channel.Name.Trim();
-        return ZeusConfigurationLoader.Normalize(channel.Type) switch
+        return ZeusConfigurationText.Normalize(channel.Type) switch
         {
             "virtual" => Await(host.AddVirtualChannelAsync(name, CreateResponder(channel), cancellationToken)),
             "serial" => Await(host.AddSerialPortAsync(name, channel.PortName!, channel.BaudRate, cancellationToken)),
@@ -255,10 +255,10 @@ public static class ZeusHostBuilderConfigurationExtensions
 
     private static string ChannelFingerprint(ChannelConfiguration channel)
     {
-        var type = ZeusConfigurationLoader.Normalize(channel.Type);
+        var type = ZeusConfigurationText.Normalize(channel.Type);
         return type switch
         {
-            "virtual" => string.Join('|', type, ZeusConfigurationLoader.Normalize(channel.Responder), channel.UnitId, ZeusConfigurationLoader.Normalize(channel.Transport), channel.MeterAddress?.Trim(), channel.CommonAddress, channel.SnmpCommunity, channel.SnmpWriteCommunity),
+            "virtual" => string.Join('|', type, ZeusConfigurationText.Normalize(channel.Responder), channel.UnitId, ZeusConfigurationText.Normalize(channel.Transport), channel.MeterAddress?.Trim(), channel.CommonAddress, channel.SnmpCommunity, channel.SnmpWriteCommunity),
             "serial" => string.Join('|', type, channel.PortName?.Trim(), channel.BaudRate),
             "tcp" => string.Join('|', type, channel.Host?.Trim(), channel.Port),
             "tcp-server" => string.Join('|', "tcp-server", channel.LocalAddress?.Trim(), EffectiveTcpServerPort(channel)),
@@ -271,8 +271,8 @@ public static class ZeusHostBuilderConfigurationExtensions
     private static string DeviceFingerprint(DeviceConfiguration device)
     {
         var points = string.Join(';', device.Points.Select(ZeusConfigurationText.PointFingerprint));
-        var binder = ZeusJsonBinders.FindDevice(ZeusConfigurationLoader.Normalize(device.Type));
-        var protocol = binder?.DeviceFingerprint(device) ?? ZeusConfigurationLoader.Normalize(device.Type);
+        var binder = ZeusJsonBinders.FindDevice(ZeusConfigurationText.Normalize(device.Type));
+        var protocol = binder?.DeviceFingerprint(device) ?? ZeusConfigurationText.Normalize(device.Type);
         return string.Join('|', device.Channel.Trim(), protocol, points);
     }
 
@@ -292,7 +292,7 @@ public static class ZeusHostBuilderConfigurationExtensions
     private static void ApplyChannel(ZeusHostBuilder builder, ChannelConfiguration channel)
     {
         var name = channel.Name.Trim();
-        switch (ZeusConfigurationLoader.Normalize(channel.Type))
+        switch (ZeusConfigurationText.Normalize(channel.Type))
         {
             case "virtual":
                 builder.AddVirtualChannel(name, CreateResponder(channel));
@@ -349,12 +349,12 @@ public static class ZeusHostBuilderConfigurationExtensions
             return null;
         }
 
-        var binder = ZeusJsonBinders.FindResponder(ZeusConfigurationLoader.Normalize(channel.Responder));
+        var binder = ZeusJsonBinders.FindResponder(ZeusConfigurationText.Normalize(channel.Responder));
         return binder?.CreateResponder(channel);
     }
 
     private static IZeusJsonBinder RequireDeviceBinder(DeviceConfiguration device)
-        => ZeusJsonBinders.FindDevice(ZeusConfigurationLoader.Normalize(device.Type))
+        => ZeusJsonBinders.FindDevice(ZeusConfigurationText.Normalize(device.Type))
             ?? throw new ZeusException($"设备类型 {device.Type} 没有对应的 JSON 绑定。请引用对应协议包。");
 }
 

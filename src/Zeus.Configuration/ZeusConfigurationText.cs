@@ -6,10 +6,10 @@ namespace Zeus;
 public static class ZeusConfigurationText
 {
     /// <summary>
-    /// 去掉空白、转小写，并把下划线换成连字符。
+    /// 去掉空白并转小写。
     /// </summary>
     public static string Normalize(string? value)
-        => (value ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "-");
+        => (value ?? string.Empty).Trim().ToLowerInvariant();
 
     /// <summary>
     /// 校验名称非空。

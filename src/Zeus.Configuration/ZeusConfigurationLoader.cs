@@ -121,7 +121,7 @@ public static class ZeusConfigurationLoader
                 throw new ZeusException($"{path}.name「{channel.Name}」重复。每个通道名在文件内必须唯一。");
             }
 
-            switch (Normalize(channel.Type))
+            switch (ZeusConfigurationText.Normalize(channel.Type))
             {
                 case "virtual":
                     ValidateVirtual(channel, path);
@@ -183,7 +183,7 @@ public static class ZeusConfigurationLoader
                     $"{path}.channel「{device.Channel}」未在 channels 中声明。请先写通道，再写设备。");
             }
 
-            var type = Normalize(device.Type);
+            var type = ZeusConfigurationText.Normalize(device.Type);
             var binder = ZeusJsonBinders.FindDevice(type);
             if (binder is null)
             {
@@ -196,9 +196,6 @@ public static class ZeusConfigurationLoader
         }
     }
 
-    /// <summary>规范化类型字符串，供绑定查找与指纹使用。</summary>
-    public static string Normalize(string? value) => ZeusConfigurationText.Normalize(value);
-
     private static void ValidateVirtual(ChannelConfiguration channel, string path)
     {
         if (string.IsNullOrWhiteSpace(channel.Responder))
@@ -206,7 +203,7 @@ public static class ZeusConfigurationLoader
             return;
         }
 
-        var responder = Normalize(channel.Responder);
+        var responder = ZeusConfigurationText.Normalize(channel.Responder);
         var binder = ZeusJsonBinders.FindResponder(responder);
         if (binder is null)
         {

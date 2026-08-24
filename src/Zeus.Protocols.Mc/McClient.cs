@@ -51,7 +51,7 @@ public sealed class McClient : IAsyncDisposable
                 _buffer.Clear();
             }
 
-            var request = Mc3ECodec.EncodeRequest(_options, command, subcommand, data.Span);
+            var request = McCodec.EncodeRequest(_options, command, subcommand, data.Span);
             await _channel.WriteAsync(request, cancellationToken).ConfigureAwait(false);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -62,7 +62,7 @@ public sealed class McClient : IAsyncDisposable
                 timeoutCts.Token.ThrowIfCancellationRequested();
                 lock (_bufferLock)
                 {
-                    if (Mc3ECodec.TryDecodeRawResponse(_buffer, _options, out var endCode, out var response, out var consumed))
+                    if (McCodec.TryDecodeRawResponse(_buffer, _options, out var endCode, out var response, out var consumed))
                     {
                         _buffer.RemoveRange(0, consumed);
                         if (endCode != 0)
@@ -83,7 +83,7 @@ public sealed class McClient : IAsyncDisposable
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
                     throw new ZeusProtocolException(
-                        $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MC 3E 应答。请检查 PLC IP、端口、3E 帧设置或用 McSlaveResponder 联调。");
+                        $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MC 应答。请检查 PLC IP、端口、帧类型、编码或用 McSlaveResponder 联调。");
                 }
             }
         }
@@ -101,7 +101,7 @@ public sealed class McClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsurePoints(points, GetMaxWordPoints(), "MC 字软元件读取");
-        var request = Mc3ECodec.BuildDeviceRequest(address, deviceCode, points);
+        var request = McCodec.BuildDeviceRequest(address, deviceCode, points);
         var response = await ExecuteDeviceAsync(McOperation.ReadWords, request, points, cancellationToken)
             .ConfigureAwait(false);
 
@@ -113,7 +113,7 @@ public sealed class McClient : IAsyncDisposable
         var values = new ushort[points];
         for (var i = 0; i < points; i++)
         {
-            values[i] = Mc3ECodec.ReadUInt16LittleEndian(response.AsSpan(i * 2, 2));
+            values[i] = McCodec.ReadUInt16LittleEndian(response.AsSpan(i * 2, 2));
         }
 
         return values;
@@ -129,10 +129,10 @@ public sealed class McClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(values);
         EnsurePoints(values.Count, GetMaxWordPoints(), "MC 字软元件写入");
         var request = new byte[6 + (values.Count * 2)];
-        Mc3ECodec.BuildDeviceRequest(address, deviceCode, (ushort)values.Count).CopyTo(request, 0);
+        McCodec.BuildDeviceRequest(address, deviceCode, (ushort)values.Count).CopyTo(request, 0);
         for (var i = 0; i < values.Count; i++)
         {
-            Mc3ECodec.WriteUInt16LittleEndian(request.AsSpan(6 + (i * 2), 2), values[i]);
+            McCodec.WriteUInt16LittleEndian(request.AsSpan(6 + (i * 2), 2), values[i]);
         }
 
         var response = await ExecuteDeviceAsync(McOperation.WriteWords, request, (ushort)values.Count, cancellationToken)
@@ -151,11 +151,11 @@ public sealed class McClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsurePoints(points, GetMaxBitPoints(), "MC 位软元件读取");
-        var request = Mc3ECodec.BuildDeviceRequest(address, deviceCode, points);
+        var request = McCodec.BuildDeviceRequest(address, deviceCode, points);
         var response = await ExecuteDeviceAsync(McOperation.ReadBits, request, points, cancellationToken)
             .ConfigureAwait(false);
 
-        var byteCount = Mc3ECodec.BitByteCount(points);
+        var byteCount = McCodec.BitByteCount(points);
         if (response.Length < byteCount)
         {
             throw new ZeusProtocolException("MC 位软元件读取响应长度不足。请核对 PLC 返回数据。");
@@ -164,7 +164,7 @@ public sealed class McClient : IAsyncDisposable
         var values = new bool[points];
         for (var i = 0; i < points; i++)
         {
-            values[i] = Mc3ECodec.GetPackedBit(response, i);
+            values[i] = McCodec.GetPackedBit(response, i);
         }
 
         return values;
@@ -179,7 +179,7 @@ public sealed class McClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(wordDevices);
         doubleWordDevices ??= Array.Empty<McDeviceAddress>();
         EnsureRandomCounts(wordDevices.Count, doubleWordDevices.Count, "MC 随机读取");
-        var request = Mc3ECodec.BuildRandomReadRequest(wordDevices, doubleWordDevices);
+        var request = McCodec.BuildRandomReadRequest(wordDevices, doubleWordDevices);
         var response = await ExecuteDeviceAsync(
                 McOperation.RandomRead,
                 request,
@@ -188,7 +188,7 @@ public sealed class McClient : IAsyncDisposable
                 (ushort)doubleWordDevices.Count)
             .ConfigureAwait(false);
 
-        return Mc3ECodec.ReadRandomReadResponse(response, (ushort)wordDevices.Count, (ushort)doubleWordDevices.Count);
+        return McCodec.ReadRandomReadResponse(response, (ushort)wordDevices.Count, (ushort)doubleWordDevices.Count);
     }
 
     /// <summary>批量写入位软元件，例如 M 继电器。</summary>
@@ -200,11 +200,11 @@ public sealed class McClient : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(values);
         EnsurePoints(values.Count, GetMaxBitPoints(), "MC 位软元件写入");
-        var request = new byte[6 + Mc3ECodec.BitByteCount(values.Count)];
-        Mc3ECodec.BuildDeviceRequest(address, deviceCode, (ushort)values.Count).CopyTo(request, 0);
+        var request = new byte[6 + McCodec.BitByteCount(values.Count)];
+        McCodec.BuildDeviceRequest(address, deviceCode, (ushort)values.Count).CopyTo(request, 0);
         for (var i = 0; i < values.Count; i++)
         {
-            Mc3ECodec.SetPackedBit(request.AsSpan(6), i, values[i]);
+            McCodec.SetPackedBit(request.AsSpan(6), i, values[i]);
         }
 
         var response = await ExecuteDeviceAsync(McOperation.WriteBits, request, (ushort)values.Count, cancellationToken)
@@ -224,7 +224,7 @@ public sealed class McClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(wordValues);
         doubleWordValues ??= Array.Empty<McDoubleWordWrite>();
         EnsureRandomCounts(wordValues.Count, doubleWordValues.Count, "MC 随机写入字软元件");
-        var request = Mc3ECodec.BuildRandomWriteWordsRequest(wordValues, doubleWordValues);
+        var request = McCodec.BuildRandomWriteWordsRequest(wordValues, doubleWordValues);
         var response = await ExecuteDeviceAsync(
                 McOperation.RandomWriteWords,
                 request,
@@ -245,7 +245,7 @@ public sealed class McClient : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(values);
         EnsureRandomCount(values.Count, "MC 随机写入位软元件");
-        var request = Mc3ECodec.BuildRandomWriteBitsRequest(values);
+        var request = McCodec.BuildRandomWriteBitsRequest(values);
         var response = await ExecuteDeviceAsync(
                 McOperation.RandomWriteBits,
                 request,
@@ -267,9 +267,9 @@ public sealed class McClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureNot1E("多块批量读取");
-        var request = Mc3ECodec.BuildMultipleBlockReadRequest(wordBlocks, bitBlocks);
-        var payload = Mc3ECodec.EncodeRawPayload(_options, request);
-        var response = await ExecuteAsync(Mc3ECodec.MultipleBlockReadCommand, Mc3ECodec.WordSubcommand, payload, cancellationToken)
+        var request = McCodec.BuildMultipleBlockReadRequest(wordBlocks, bitBlocks);
+        var payload = McCodec.EncodeRawPayload(_options, request);
+        var response = await ExecuteAsync(McCodec.MultipleBlockReadCommand, McCodec.WordSubcommand, payload, cancellationToken)
             .ConfigureAwait(false);
         var binary = DecodeRawPayload(response);
         return ParseMultipleBlockRead(wordBlocks, bitBlocks ?? Array.Empty<McDeviceRange>(), binary);
@@ -301,18 +301,18 @@ public sealed class McClient : IAsyncDisposable
         EnsureNot1E("远程控制");
         var command = mode switch
         {
-            McRemoteControlMode.Run => Mc3ECodec.RemoteRunCommand,
-            McRemoteControlMode.Stop => Mc3ECodec.RemoteStopCommand,
-            McRemoteControlMode.Pause => Mc3ECodec.RemotePauseCommand,
-            McRemoteControlMode.LatchClear => Mc3ECodec.RemoteLatchClearCommand,
-            McRemoteControlMode.Reset => Mc3ECodec.RemoteResetCommand,
+            McRemoteControlMode.Run => McCodec.RemoteRunCommand,
+            McRemoteControlMode.Stop => McCodec.RemoteStopCommand,
+            McRemoteControlMode.Pause => McCodec.RemotePauseCommand,
+            McRemoteControlMode.LatchClear => McCodec.RemoteLatchClearCommand,
+            McRemoteControlMode.Reset => McCodec.RemoteResetCommand,
             _ => throw new ZeusProtocolException($"不支持的 MC 远程控制模式 {mode}。")
         };
 
         var payload = mode == McRemoteControlMode.Run
-            ? Mc3ECodec.EncodeRawPayload(_options, [0x01, 0x00])
+            ? McCodec.EncodeRawPayload(_options, [0x01, 0x00])
             : ReadOnlyMemory<byte>.Empty;
-        var response = await ExecuteAsync(command, Mc3ECodec.WordSubcommand, payload, cancellationToken).ConfigureAwait(false);
+        var response = await ExecuteAsync(command, McCodec.WordSubcommand, payload, cancellationToken).ConfigureAwait(false);
         if (response.Length != 0)
         {
             throw new ZeusProtocolException("MC 远程控制响应数据区应为空。请核对 PLC 返回数据。");
@@ -385,8 +385,8 @@ public sealed class McClient : IAsyncDisposable
                 _buffer.Clear();
             }
 
-            var request = Mc3ECodec.EncodeDeviceRequest(_options, operation, data.Span);
-            var pending = Mc3ECodec.CreatePending(operation, points, extraPoints);
+            var request = McCodec.EncodeDeviceRequest(_options, operation, data.Span);
+            var pending = McCodec.CreatePending(operation, points, extraPoints);
             await _channel.WriteAsync(request, cancellationToken).ConfigureAwait(false);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -397,7 +397,7 @@ public sealed class McClient : IAsyncDisposable
                 timeoutCts.Token.ThrowIfCancellationRequested();
                 lock (_bufferLock)
                 {
-                    if (Mc3ECodec.TryDecodeDeviceResponse(_buffer, _options, pending, out var endCode, out var response, out var consumed))
+                    if (McCodec.TryDecodeDeviceResponse(_buffer, _options, pending, out var endCode, out var response, out var consumed))
                     {
                         _buffer.RemoveRange(0, consumed);
                         if (endCode != 0)
@@ -492,7 +492,7 @@ public sealed class McClient : IAsyncDisposable
 
             for (var i = 0; i < block.Points; i++)
             {
-                wordValues[wordIndex++] = Mc3ECodec.ReadUInt16LittleEndian(binary.Slice(offset, 2));
+                wordValues[wordIndex++] = McCodec.ReadUInt16LittleEndian(binary.Slice(offset, 2));
                 offset += 2;
             }
         }
@@ -500,7 +500,7 @@ public sealed class McClient : IAsyncDisposable
         var bitIndex = 0;
         foreach (var block in bitBlocks)
         {
-            var packed = Mc3ECodec.BitByteCount(block.Points);
+            var packed = McCodec.BitByteCount(block.Points);
             if (offset + packed > binary.Length)
             {
                 throw new ZeusProtocolException("MC 多块批量读取位块响应长度不足。请核对 PLC 返回数据。");
@@ -509,7 +509,7 @@ public sealed class McClient : IAsyncDisposable
             var payload = binary.Slice(offset, packed);
             for (var i = 0; i < block.Points; i++)
             {
-                bitValues[bitIndex++] = Mc3ECodec.GetPackedBit(payload, i);
+                bitValues[bitIndex++] = McCodec.GetPackedBit(payload, i);
             }
 
             offset += packed;

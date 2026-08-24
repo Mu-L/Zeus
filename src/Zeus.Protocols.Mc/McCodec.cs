@@ -3,7 +3,7 @@ namespace Zeus;
 /// <summary>
 /// Mitsubishi MC Protocol 帧编解码。
 /// </summary>
-internal static class Mc3ECodec
+internal static class McCodec
 {
     public const ushort BatchReadCommand = 0x0401;
     public const ushort BatchWriteCommand = 0x1401;

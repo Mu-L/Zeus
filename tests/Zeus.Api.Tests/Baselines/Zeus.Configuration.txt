@@ -151,7 +151,6 @@ namespace Zeus
     {
         public static Zeus.ZeusAppConfiguration LoadFile(string path) { }
         public static Zeus.ZeusAppConfiguration LoadJson(string json, string sourceName = "配置") { }
-        public static string Normalize(string? value) { }
         public static void Validate(Zeus.ZeusAppConfiguration document, string sourceName = "配置") { }
     }
     public static class ZeusConfigurationText

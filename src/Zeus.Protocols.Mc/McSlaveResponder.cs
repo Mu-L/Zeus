@@ -25,7 +25,7 @@ public sealed class McSlaveResponder : IVirtualResponder
     /// <inheritdoc />
     public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
     {
-        if (!Mc3ECodec.TryDecodeRequest(request.Span, out var context, out var command, out var subcommand, out var data))
+        if (!McCodec.TryDecodeRequest(request.Span, out var context, out var command, out var subcommand, out var data))
         {
             return null;
         }
@@ -33,11 +33,11 @@ public sealed class McSlaveResponder : IVirtualResponder
         try
         {
             var response = Handle(command, subcommand, data);
-            return Mc3ECodec.EncodeResponse(context, Success, response);
+            return McCodec.EncodeResponse(context, Success, response);
         }
         catch (McException ex)
         {
-            return Mc3ECodec.EncodeResponse(context, ex.EndCode, []);
+            return McCodec.EncodeResponse(context, ex.EndCode, []);
         }
     }
 
@@ -45,32 +45,32 @@ public sealed class McSlaveResponder : IVirtualResponder
     {
         return command switch
         {
-            Mc3ECodec.BatchReadCommand when subcommand == Mc3ECodec.WordSubcommand => ReadWords(data),
-            Mc3ECodec.BatchWriteCommand when subcommand == Mc3ECodec.WordSubcommand => WriteWords(data),
-            Mc3ECodec.BatchReadCommand when subcommand == Mc3ECodec.BitSubcommand => ReadBits(data),
-            Mc3ECodec.BatchWriteCommand when subcommand == Mc3ECodec.BitSubcommand => WriteBits(data),
-            Mc3ECodec.RandomReadCommand when subcommand == Mc3ECodec.WordSubcommand => RandomRead(data),
-            Mc3ECodec.RandomWriteCommand when subcommand == Mc3ECodec.WordSubcommand => RandomWriteWords(data),
-            Mc3ECodec.RandomWriteCommand when subcommand == Mc3ECodec.BitSubcommand => RandomWriteBits(data),
-            Mc3ECodec.MultipleBlockReadCommand when subcommand == Mc3ECodec.WordSubcommand => MultipleBlockRead(data),
-            Mc3ECodec.RemoteRunCommand when subcommand == Mc3ECodec.WordSubcommand => RemoteControl(McRemoteControlMode.Run, running: true),
-            Mc3ECodec.RemoteStopCommand when subcommand == Mc3ECodec.WordSubcommand => RemoteControl(McRemoteControlMode.Stop, running: false),
-            Mc3ECodec.RemotePauseCommand when subcommand == Mc3ECodec.WordSubcommand => RemoteControl(McRemoteControlMode.Pause, running: false),
-            Mc3ECodec.RemoteLatchClearCommand when subcommand == Mc3ECodec.WordSubcommand => RemoteControl(McRemoteControlMode.LatchClear, _memory.IsRunning),
-            Mc3ECodec.RemoteResetCommand when subcommand == Mc3ECodec.WordSubcommand => RemoteControl(McRemoteControlMode.Reset, running: true),
+            McCodec.BatchReadCommand when subcommand == McCodec.WordSubcommand => ReadWords(data),
+            McCodec.BatchWriteCommand when subcommand == McCodec.WordSubcommand => WriteWords(data),
+            McCodec.BatchReadCommand when subcommand == McCodec.BitSubcommand => ReadBits(data),
+            McCodec.BatchWriteCommand when subcommand == McCodec.BitSubcommand => WriteBits(data),
+            McCodec.RandomReadCommand when subcommand == McCodec.WordSubcommand => RandomRead(data),
+            McCodec.RandomWriteCommand when subcommand == McCodec.WordSubcommand => RandomWriteWords(data),
+            McCodec.RandomWriteCommand when subcommand == McCodec.BitSubcommand => RandomWriteBits(data),
+            McCodec.MultipleBlockReadCommand when subcommand == McCodec.WordSubcommand => MultipleBlockRead(data),
+            McCodec.RemoteRunCommand when subcommand == McCodec.WordSubcommand => RemoteControl(McRemoteControlMode.Run, running: true),
+            McCodec.RemoteStopCommand when subcommand == McCodec.WordSubcommand => RemoteControl(McRemoteControlMode.Stop, running: false),
+            McCodec.RemotePauseCommand when subcommand == McCodec.WordSubcommand => RemoteControl(McRemoteControlMode.Pause, running: false),
+            McCodec.RemoteLatchClearCommand when subcommand == McCodec.WordSubcommand => RemoteControl(McRemoteControlMode.LatchClear, _memory.IsRunning),
+            McCodec.RemoteResetCommand when subcommand == McCodec.WordSubcommand => RemoteControl(McRemoteControlMode.Reset, running: true),
             _ => throw new McException(UnsupportedCommand)
         };
     }
 
     private byte[] ReadWords(byte[] data)
     {
-        var (address, deviceCode, points) = Mc3ECodec.ReadDeviceRequest(data);
+        var (address, deviceCode, points) = McCodec.ReadDeviceRequest(data);
         var table = GetWordTable(deviceCode);
         EnsureRange(address, points, table.Length);
         var response = new byte[points * 2];
         for (var i = 0; i < points; i++)
         {
-            Mc3ECodec.WriteUInt16LittleEndian(response.AsSpan(i * 2, 2), table[address + i]);
+            McCodec.WriteUInt16LittleEndian(response.AsSpan(i * 2, 2), table[address + i]);
         }
 
         return response;
@@ -78,7 +78,7 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] WriteWords(byte[] data)
     {
-        var (address, deviceCode, points) = Mc3ECodec.ReadDeviceRequest(data);
+        var (address, deviceCode, points) = McCodec.ReadDeviceRequest(data);
         var table = GetWordTable(deviceCode);
         if (data.Length < 6 + (points * 2))
         {
@@ -88,7 +88,7 @@ public sealed class McSlaveResponder : IVirtualResponder
         EnsureRange(address, points, table.Length);
         for (var i = 0; i < points; i++)
         {
-            table[address + i] = Mc3ECodec.ReadUInt16LittleEndian(data.AsSpan(6 + (i * 2), 2));
+            table[address + i] = McCodec.ReadUInt16LittleEndian(data.AsSpan(6 + (i * 2), 2));
         }
 
         return [];
@@ -96,13 +96,13 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] ReadBits(byte[] data)
     {
-        var (address, deviceCode, points) = Mc3ECodec.ReadDeviceRequest(data);
+        var (address, deviceCode, points) = McCodec.ReadDeviceRequest(data);
         var table = GetBitTable(deviceCode);
         EnsureRange(address, points, table.Length);
-        var response = new byte[Mc3ECodec.BitByteCount(points)];
+        var response = new byte[McCodec.BitByteCount(points)];
         for (var i = 0; i < points; i++)
         {
-            Mc3ECodec.SetPackedBit(response, i, table[address + i]);
+            McCodec.SetPackedBit(response, i, table[address + i]);
         }
 
         return response;
@@ -110,9 +110,9 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] WriteBits(byte[] data)
     {
-        var (address, deviceCode, points) = Mc3ECodec.ReadDeviceRequest(data);
+        var (address, deviceCode, points) = McCodec.ReadDeviceRequest(data);
         var table = GetBitTable(deviceCode);
-        if (data.Length < 6 + Mc3ECodec.BitByteCount(points))
+        if (data.Length < 6 + McCodec.BitByteCount(points))
         {
             throw new McException(InvalidDevice);
         }
@@ -121,7 +121,7 @@ public sealed class McSlaveResponder : IVirtualResponder
         var payload = data.AsSpan(6);
         for (var i = 0; i < points; i++)
         {
-            table[address + i] = Mc3ECodec.GetPackedBit(payload, i);
+            table[address + i] = McCodec.GetPackedBit(payload, i);
         }
 
         return [];
@@ -129,13 +129,13 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] RandomRead(byte[] data)
     {
-        var (wordDevices, doubleWordDevices) = Mc3ECodec.ReadRandomReadRequest(data);
+        var (wordDevices, doubleWordDevices) = McCodec.ReadRandomReadRequest(data);
         var response = new byte[(wordDevices.Length * 2) + (doubleWordDevices.Length * 4)];
         var offset = 0;
         foreach (var device in wordDevices)
         {
             var value = ReadWord(device);
-            Mc3ECodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), value);
+            McCodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), value);
             offset += 2;
         }
 
@@ -143,8 +143,8 @@ public sealed class McSlaveResponder : IVirtualResponder
         {
             var table = GetWordTable(device.DeviceCode);
             EnsureRange(device.Address, 2, table.Length);
-            Mc3ECodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), table[device.Address]);
-            Mc3ECodec.WriteUInt16LittleEndian(response.AsSpan(offset + 2, 2), table[device.Address + 1]);
+            McCodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), table[device.Address]);
+            McCodec.WriteUInt16LittleEndian(response.AsSpan(offset + 2, 2), table[device.Address + 1]);
             offset += 4;
         }
 
@@ -153,7 +153,7 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] RandomWriteWords(byte[] data)
     {
-        var (wordValues, doubleWordValues) = Mc3ECodec.ReadRandomWriteWordsRequest(data);
+        var (wordValues, doubleWordValues) = McCodec.ReadRandomWriteWordsRequest(data);
         foreach (var item in wordValues)
         {
             var table = GetWordTable(item.DeviceCode);
@@ -174,7 +174,7 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] RandomWriteBits(byte[] data)
     {
-        var values = Mc3ECodec.ReadRandomWriteBitsRequest(data);
+        var values = McCodec.ReadRandomWriteBitsRequest(data);
         foreach (var item in values)
         {
             var table = GetBitTable(item.DeviceCode);
@@ -187,9 +187,9 @@ public sealed class McSlaveResponder : IVirtualResponder
 
     private byte[] MultipleBlockRead(byte[] data)
     {
-        var (wordBlocks, bitBlocks) = Mc3ECodec.ReadMultipleBlockReadRequest(data);
+        var (wordBlocks, bitBlocks) = McCodec.ReadMultipleBlockReadRequest(data);
         var wordBytes = wordBlocks.Sum(block => block.Points * 2);
-        var bitBytes = bitBlocks.Sum(block => Mc3ECodec.BitByteCount(block.Points));
+        var bitBytes = bitBlocks.Sum(block => McCodec.BitByteCount(block.Points));
         var response = new byte[wordBytes + bitBytes];
         var offset = 0;
         foreach (var block in wordBlocks)
@@ -198,7 +198,7 @@ public sealed class McSlaveResponder : IVirtualResponder
             EnsureRange(block.Address, block.Points, table.Length);
             for (var i = 0; i < block.Points; i++)
             {
-                Mc3ECodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), table[block.Address + i]);
+                McCodec.WriteUInt16LittleEndian(response.AsSpan(offset, 2), table[block.Address + i]);
                 offset += 2;
             }
         }
@@ -207,11 +207,11 @@ public sealed class McSlaveResponder : IVirtualResponder
         {
             var table = GetBitTable(block.DeviceCode);
             EnsureRange(block.Address, block.Points, table.Length);
-            var packed = response.AsSpan(offset, Mc3ECodec.BitByteCount(block.Points));
+            var packed = response.AsSpan(offset, McCodec.BitByteCount(block.Points));
             packed.Clear();
             for (var i = 0; i < block.Points; i++)
             {
-                Mc3ECodec.SetPackedBit(packed, i, table[block.Address + i]);
+                McCodec.SetPackedBit(packed, i, table[block.Address + i]);
             }
 
             offset += packed.Length;

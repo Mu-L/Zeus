@@ -62,9 +62,9 @@ public static class ZeusJsonBinders
                     Register((IZeusJsonBinder)Activator.CreateInstance(type)!);
                 }
             }
-            catch (Exception)
+            catch (FileNotFoundException)
             {
-                // 未引用的协议包不在输出目录，忽略。
+                // 未引用的协议包不在输出目录，忽略；已存在但加载失败的问题必须暴露出来。
             }
         }
     }

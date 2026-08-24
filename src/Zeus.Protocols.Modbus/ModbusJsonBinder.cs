@@ -48,7 +48,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
         => Add(device, (name, channel, unitId, timeout, points) =>
         {
-            switch (CreateTransport(ZeusConfigurationText.Normalize(device.Type)))
+            switch (CreateDeviceTransport(ZeusConfigurationText.Normalize(device.Type), device.Type))
             {
                 case ModbusTransport.Tcp:
                     builder.AddModbusTcp(name, channel, unitId, timeout, points);
@@ -66,7 +66,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
         => Add(device, (name, channel, unitId, timeout, points) =>
         {
-            switch (CreateTransport(ZeusConfigurationText.Normalize(device.Type)))
+            switch (CreateDeviceTransport(ZeusConfigurationText.Normalize(device.Type), device.Type))
             {
                 case ModbusTransport.Tcp:
                     host.AddModbusTcp(name, channel, unitId, timeout, points);
@@ -88,7 +88,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
             return null;
         }
 
-        return new ModbusSlaveResponder(channel.UnitId, CreateTransport(ZeusConfigurationText.Normalize(channel.Transport)));
+        return new ModbusSlaveResponder(channel.UnitId, CreateChannelTransport(ZeusConfigurationText.Normalize(channel.Transport), channel.Transport));
     }
 
     /// <inheritdoc />
@@ -104,17 +104,23 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
         add(device.Name.Trim(), device.Channel.Trim(), device.UnitId, timeout, points);
     }
 
-    private static ModbusTransport CreateTransport(string normalizedTypeOrTransport)
-    {
-        if (normalizedTypeOrTransport is "modbus-tcp" or "tcp")
+    private static ModbusTransport CreateDeviceTransport(string normalizedType, string original)
+        => normalizedType switch
         {
-            return ModbusTransport.Tcp;
-        }
+            "modbus-rtu" => ModbusTransport.Rtu,
+            "modbus-tcp" => ModbusTransport.Tcp,
+            "modbus-ascii" => ModbusTransport.Ascii,
+            _ => throw new ZeusException($"Modbus device type「{original}」不受支持。可选 modbus-rtu、modbus-tcp、modbus-ascii。")
+        };
 
-        return normalizedTypeOrTransport is "modbus-ascii" or "ascii"
-            ? ModbusTransport.Ascii
-            : ModbusTransport.Rtu;
-    }
+    private static ModbusTransport CreateChannelTransport(string normalizedTransport, string original)
+        => normalizedTransport switch
+        {
+            "rtu" => ModbusTransport.Rtu,
+            "tcp" => ModbusTransport.Tcp,
+            "ascii" => ModbusTransport.Ascii,
+            _ => throw new ZeusException($"Modbus transport「{original}」不受支持。可选 rtu、tcp、ascii。")
+        };
 
     private static void ValidatePoints(List<PointConfiguration> points, string devicePath)
     {
