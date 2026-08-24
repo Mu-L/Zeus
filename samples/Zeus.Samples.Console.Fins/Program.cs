@@ -10,7 +10,7 @@ await using var app = ZeusHost.Create(builder =>
 {
     builder.AddAcquisition(TimeSpan.FromMilliseconds(100));
     builder.AddVirtualChannel("fins-link", new FinsSlaveResponder(FinsTransport.Udp, memory));
-    builder.AddOmronFinsUdp("plc", "fins-link", new FinsOptions
+    builder.AddOmronFins("plc", "fins-link", FinsTransport.Udp, new FinsOptions
     {
         SourceNode = 10,
         DestinationNode = 1

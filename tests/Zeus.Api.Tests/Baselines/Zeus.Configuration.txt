@@ -104,6 +104,9 @@ namespace Zeus
         public PointConfiguration() { }
         [System.Text.Json.Serialization.JsonConverter(typeof(Zeus.FlexibleInt32JsonConverter?))]
         public int Address { get; set; }
+        public string? AlarmArea { get; set; }
+        public string? AlarmAssignee { get; set; }
+        public string? AlarmSeverity { get; set; }
         public string? Area { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("bit")]
         public int BitOffset { get; set; }
@@ -142,7 +145,6 @@ namespace Zeus
         public Zeus.AcquisitionConfiguration Acquisition { get; set; }
         public System.Collections.Generic.List<Zeus.ChannelConfiguration> Channels { get; set; }
         public System.Collections.Generic.List<Zeus.DeviceConfiguration> Devices { get; set; }
-        public string? PointHistoryFile { get; set; }
         public Zeus.ReconnectConfiguration Reconnect { get; set; }
     }
     public static class ZeusConfigurationLoader
@@ -157,6 +159,7 @@ namespace Zeus
         public static Zeus.PointAlarmLimits? CreateAlarmLimits(Zeus.PointConfiguration point) { }
         public static void EnsureName(string? name, string path) { }
         public static string Normalize(string? value) { }
+        public static Zeus.PointAlarmSeverity ParseSeverity(string? value) { }
         public static string PointFingerprint(Zeus.PointConfiguration point) { }
         public static void ValidateAlarmLimit(double? value, string path) { }
         public static void ValidatePointAlarms(Zeus.PointConfiguration point, string path) { }

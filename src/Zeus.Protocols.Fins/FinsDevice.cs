@@ -14,7 +14,7 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
     private readonly IReadOnlyList<FinsPointSpec> _specs;
     private readonly IReadOnlyList<PointDefinition> _points;
 
-    /// <summary>创建设备。通常由 <c>AddOmronFins</c> / <c>AddOmronFinsUdp</c> / <c>AddOmronFinsTcp</c> 构造。</summary>
+    /// <summary>创建设备。通常由 <c>AddOmronFins</c> 构造。</summary>
     public FinsDevice(
         string name,
         IChannel channel,

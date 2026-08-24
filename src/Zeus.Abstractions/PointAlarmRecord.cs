@@ -19,6 +19,11 @@ public sealed class PointAlarmRecord
     /// <param name="acknowledgedAt">确认时间；未确认时为 <c>null</c>。</param>
     /// <param name="clearedAt">复归时间；仍活动时为 <c>null</c>。</param>
     /// <param name="acknowledgedBy">确认人；未确认时为 <c>null</c>。</param>
+    /// <param name="severity">严重等级。</param>
+    /// <param name="area">区域；未配置时为 <c>null</c>。</param>
+    /// <param name="assignee">当前责任人；未指派时为 <c>null</c>。</param>
+    /// <param name="shelvedUntil">搁置截止时间；未搁置时为 <c>null</c>。</param>
+    /// <param name="suppressed">为 <c>true</c> 时该点被抑制，不进入活动列表。</param>
     public PointAlarmRecord(
         Guid id,
         string qualifiedName,
@@ -30,7 +35,12 @@ public sealed class PointAlarmRecord
         DateTimeOffset raisedAt,
         DateTimeOffset? acknowledgedAt,
         DateTimeOffset? clearedAt,
-        string? acknowledgedBy)
+        string? acknowledgedBy,
+        PointAlarmSeverity severity = PointAlarmSeverity.Warning,
+        string? area = null,
+        string? assignee = null,
+        DateTimeOffset? shelvedUntil = null,
+        bool suppressed = false)
     {
         if (string.IsNullOrWhiteSpace(qualifiedName))
         {
@@ -48,6 +58,11 @@ public sealed class PointAlarmRecord
         AcknowledgedAt = acknowledgedAt;
         ClearedAt = clearedAt;
         AcknowledgedBy = acknowledgedBy;
+        Severity = severity;
+        Area = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+        Assignee = string.IsNullOrWhiteSpace(assignee) ? null : assignee.Trim();
+        ShelvedUntil = shelvedUntil;
+        Suppressed = suppressed;
     }
 
     /// <summary>记录标识。</summary>
@@ -83,6 +98,21 @@ public sealed class PointAlarmRecord
     /// <summary>确认人。未传入时为 <c>null</c>。</summary>
     public string? AcknowledgedBy { get; }
 
-    /// <summary>是否仍处于活动队列（未复归）。</summary>
+    /// <summary>严重等级。</summary>
+    public PointAlarmSeverity Severity { get; }
+
+    /// <summary>区域或工段。</summary>
+    public string? Area { get; }
+
+    /// <summary>当前责任人。</summary>
+    public string? Assignee { get; }
+
+    /// <summary>搁置截止时间。未搁置时为 <c>null</c>。</summary>
+    public DateTimeOffset? ShelvedUntil { get; }
+
+    /// <summary>该点是否被抑制。抑制期间不进入活动列表。</summary>
+    public bool Suppressed { get; }
+
+    /// <summary>是否仍处于活动队列（未复归、未搁置）。</summary>
     public bool IsOpen => Status is PointAlarmStatus.Active or PointAlarmStatus.Acknowledged;
 }

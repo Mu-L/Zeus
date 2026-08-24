@@ -32,18 +32,6 @@ public static class WinFormsChannelExtensions
     }
 
     /// <summary>
-    /// <see cref="BindText"/> 的别名，对应手册中的 <c>BindTo</c> 神谕调用面。
-    /// </summary>
-    /// <param name="channel">数据来源。</param>
-    /// <param name="control">目标控件。</param>
-    /// <param name="formatter">可选格式化。</param>
-    public static IUiBinding BindTo(
-        this IChannel channel,
-        Control control,
-        Func<ReadOnlyMemory<byte>, string>? formatter = null)
-        => channel.BindText(control, formatter);
-
-    /// <summary>
     /// 把通道状态写到控件文本。
     /// </summary>
     /// <param name="channel">要观察的通道。</param>
@@ -101,7 +89,7 @@ public static class WinFormsChannelExtensions
     /// <param name="pointName">短名或 <c>设备.点</c>。</param>
     /// <param name="control">目标控件。</param>
     /// <param name="formatter">可选格式化。</param>
-    public static IUiBinding BindTo(
+    public static IUiBinding BindText(
         this IPointTable table,
         string pointName,
         Control control,
@@ -159,70 +147,6 @@ public static class WinFormsChannelExtensions
     }
 
     /// <summary>
-    /// 把点表中指定点的最近成功采样历史推到界面线程。
-    /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="control">用于取得 UI 线程的控件。</param>
-    /// <param name="setHistory">在界面线程上接收历史，顺序从旧到新。</param>
-    public static IUiBinding BindHistory(
-        this IPointTable table,
-        string pointName,
-        Control control,
-        Action<IReadOnlyList<PointSnapshot>> setHistory)
-    {
-        ArgumentNullException.ThrowIfNull(control);
-        ArgumentNullException.ThrowIfNull(setHistory);
-        return table.BindHistory(pointName, new WinFormsUiDispatcher(control), history =>
-        {
-            if (!control.IsDisposed)
-            {
-                setHistory(history);
-            }
-        });
-    }
-
-    /// <summary>
-    /// 把指定点的趋势样本推到界面线程，适合接到图表控件。
-    /// </summary>
-    public static IUiBinding BindChart(
-        this IPointTable table,
-        string pointName,
-        Control control,
-        Action<IReadOnlyList<PointChartSample>> setSamples)
-    {
-        ArgumentNullException.ThrowIfNull(control);
-        ArgumentNullException.ThrowIfNull(setSamples);
-        return table.BindChart(pointName, new WinFormsUiDispatcher(control), samples =>
-        {
-            if (!control.IsDisposed)
-            {
-                setSamples(samples);
-            }
-        });
-    }
-
-    /// <summary>
-    /// 把指定点的仪表盘快照推到界面线程。
-    /// </summary>
-    public static IUiBinding BindDashboard(
-        this IPointTable table,
-        string pointName,
-        Control control,
-        Action<PointDashboardSnapshot> setDashboard)
-    {
-        ArgumentNullException.ThrowIfNull(control);
-        ArgumentNullException.ThrowIfNull(setDashboard);
-        return table.BindDashboard(pointName, new WinFormsUiDispatcher(control), snapshot =>
-        {
-            if (!control.IsDisposed)
-            {
-                setDashboard(snapshot);
-            }
-        });
-    }
-
-    /// <summary>
     /// 把指定点的 0–1 比例写到进度条。
     /// </summary>
     public static IUiBinding BindGauge(
@@ -271,21 +195,6 @@ public static class WinFormsChannelExtensions
     {
         ArgumentNullException.ThrowIfNull(control);
         return alarms.AsAlarmBindingSource(new WinFormsUiDispatcher(control));
-    }
-
-    /// <summary>
-    /// 创建单个点的历史采样投影，属性变更封送到该控件所在的界面线程。
-    /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="control">用于取得 UI 线程的控件，通常是窗体本身。</param>
-    public static PointHistoryBindingSource AsHistoryBindingSource(
-        this IPointTable table,
-        string pointName,
-        Control control)
-    {
-        ArgumentNullException.ThrowIfNull(control);
-        return table.AsHistoryBindingSource(pointName, new WinFormsUiDispatcher(control));
     }
 
     /// <summary>

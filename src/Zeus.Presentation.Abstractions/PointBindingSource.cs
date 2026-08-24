@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 namespace Zeus;
 
 /// <summary>
-/// 单个点的可绑定投影。属性变更会封送到指定调度器，适合 WinForms / WPF 直接绑定当前值、报警与错误状态。
+/// 单个点的可绑定投影。属性变更会封送到指定调度器，适合桌面界面做数据绑定。
 /// </summary>
 public sealed class PointBindingSource : INotifyPropertyChanged, IDisposable
 {

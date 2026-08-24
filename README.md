@@ -35,7 +35,7 @@
 - 📡 **Protocols** — Custom frames, Modbus RTU/TCP/ASCII, Mitsubishi MC 1E/3E/4E Binary/ASCII, Siemens S7 TCP, Omron FINS UDP/TCP, Omron Host Link ASCII, Panasonic MEWTOCOL-COM, Allen-Bradley EtherNet/IP CIP, DL/T 645-2007, IEC 60870-5-104, MQTT 3.1.1, and SNMP v2c, with virtual slave/PLC/meter/Broker/Agent support
 - 📊 **Acquisition** — Define a point table once, poll on intervals, keep the latest successful sample, calculate alarm limits, and write writable points back by name
 - 🧭 **Tracing** — Channel-level TX/RX packet events, rolling in-memory records, file logging, `builder.Logging`, and `AddCommunicationLogging` structured logs
-- 🖥️ **UI agnostic** — Business code is not tied to WinForms or WPF; point tables can bind directly to text, historical trends, alarm colors, enabled states, and write buttons
+- 🖥️ **Desktop UI** — WinForms binds controls directly; WPF uses MVVM binding sources with Dispatcher marshaling
 - 🧾 **JSON configuration** — Change ports and slave addresses in the field without recompiling
 - 🧪 **Hardware optional at first** — Virtual channels use the same programming model as real devices
 
@@ -54,12 +54,18 @@ meter.DataReceived += (_, e) => { /* hand data to the UI */ };
 await meter.WriteAsync("PING"u8.ToArray());
 ```
 
-Desktop apps only need to swap the binding layer. The channel declaration stays the same:
+Desktop apps keep the same channel declaration, but the UI layer follows each framework's native pattern:
 
 ```csharp
-this.AttachZeus(builder => builder.AddVirtualChannel("meter"));
-meter.BindTo(echoLabel);
-app.Points.BindTo("temperature", temperatureLabel);
+// WinForms: bind controls directly.
+var winFormsAttachment = this.AttachZeus(builder => builder.AddVirtualChannel("meter"));
+var meter = winFormsAttachment.Host.Channels.Get("meter");
+meter.BindText(echoLabel);
+winFormsAttachment.Host.Points.BindText("temperature", temperatureLabel);
+
+// WPF: bind XAML to a ViewModel.
+var wpfAttachment = this.AttachZeus(builder => builder.AddVirtualChannel("meter"));
+DataContext = new MainViewModel(wpfAttachment.Host, WpfUiDispatcher.Current());
 ```
 
 ## 📦 Assemblies
@@ -84,8 +90,8 @@ app.Points.BindTo("temperature", temperatureLabel);
 | [Zeus.Protocols.Snmp](https://www.nuget.org/packages/Zeus.Protocols.Snmp) | SNMP v2c |
 | [Zeus.Configuration](https://www.nuget.org/packages/Zeus.Configuration) | JSON project configuration |
 | [Zeus.Presentation.Abstractions](https://www.nuget.org/packages/Zeus.Presentation.Abstractions) | UI-independent binding |
-| [Zeus.Presentation.WinForms](https://www.nuget.org/packages/Zeus.Presentation.WinForms) | WinForms binding |
-| [Zeus.Presentation.Wpf](https://www.nuget.org/packages/Zeus.Presentation.Wpf) | WPF binding |
+| [Zeus.Presentation.WinForms](https://www.nuget.org/packages/Zeus.Presentation.WinForms) | WinForms control binding |
+| [Zeus.Presentation.Wpf](https://www.nuget.org/packages/Zeus.Presentation.Wpf) | WPF MVVM binding sources and Dispatcher marshaling |
 
 Join QQ group `771421105` to talk with other users. The QR code is available on the documentation [Community](https://docs.greekmythology.cn/docs/community) page.
 

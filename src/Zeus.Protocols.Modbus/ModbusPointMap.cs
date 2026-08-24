@@ -218,13 +218,13 @@ public sealed class ModbusPointMap
     }
 
     /// <summary>
-    /// 为已经声明的数值点设置或替换报警限。
+    /// 为已经声明的数值点设置或替换完整报警限（含回差、等级、区域与默认责任人）。
     /// </summary>
     /// <param name="name">点名。</param>
-    /// <param name="low">低报阈值。</param>
-    /// <param name="high">高报阈值。</param>
-    public ModbusPointMap WithAlarmLimits(string name, double? low = null, double? high = null)
+    /// <param name="alarmLimits">报警限。</param>
+    public ModbusPointMap WithAlarmLimits(string name, PointAlarmLimits alarmLimits)
     {
+        ArgumentNullException.ThrowIfNull(alarmLimits);
         var normalized = Normalize(name);
         for (var i = 0; i < _points.Count; i++)
         {
@@ -239,12 +239,21 @@ public sealed class ModbusPointMap
                 throw new ZeusException($"点 {normalized} 是布尔点，不能配置数值报警限。");
             }
 
-            _points[i] = point.WithAlarmLimits(new PointAlarmLimits(low, high));
+            _points[i] = point.WithAlarmLimits(alarmLimits);
             return this;
         }
 
         throw new ZeusException($"找不到点 {normalized}，请先声明该点再配置报警限。");
     }
+
+    /// <summary>
+    /// 为已经声明的数值点设置或替换报警限。
+    /// </summary>
+    /// <param name="name">点名。</param>
+    /// <param name="low">低报阈值。</param>
+    /// <param name="high">高报阈值。</param>
+    public ModbusPointMap WithAlarmLimits(string name, double? low = null, double? high = null)
+        => WithAlarmLimits(name, new PointAlarmLimits(low, high));
 
     private ModbusPointMap AddRegister(
         string name,

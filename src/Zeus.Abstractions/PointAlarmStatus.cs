@@ -12,5 +12,8 @@ public enum PointAlarmStatus
     Acknowledged = 1,
 
     /// <summary>点已回到正常范围，无需再确认。</summary>
-    Cleared = 2
+    Cleared = 2,
+
+    /// <summary>操作员已搁置：点仍越限，但不进入活动列表，直到解除搁置或复归。</summary>
+    Shelved = 3
 }

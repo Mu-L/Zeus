@@ -33,4 +33,39 @@ public interface IPointAlarmTable
     /// </summary>
     /// <param name="acknowledgedBy">确认人，可省略。</param>
     IReadOnlyList<PointAlarmRecord> AcknowledgeAll(string? acknowledgedBy = null);
+
+    /// <summary>
+    /// 把活动报警指派给责任人。记录不存在或已复归时抛出。
+    /// </summary>
+    /// <param name="id">报警记录标识。</param>
+    /// <param name="assignee">责任人。空字符串表示取消指派。</param>
+    PointAlarmRecord Assign(Guid id, string? assignee);
+
+    /// <summary>
+    /// 搁置一条活动报警，直到 <paramref name="until"/>。到期后若点仍越限，重新进入活动队列。
+    /// </summary>
+    /// <param name="id">报警记录标识。</param>
+    /// <param name="until">搁置截止时间，必须晚于当前时间。</param>
+    PointAlarmRecord Shelve(Guid id, DateTimeOffset until);
+
+    /// <summary>
+    /// 解除搁置。点仍越限时回到活动队列。
+    /// </summary>
+    /// <param name="id">报警记录标识。</param>
+    PointAlarmRecord Unshelve(Guid id);
+
+    /// <summary>
+    /// 抑制指定点：期间该点越限不进入活动队列。已有活动记录会被标为搁置。
+    /// </summary>
+    /// <param name="pointName">短名或限定名。</param>
+    void Suppress(string pointName);
+
+    /// <summary>
+    /// 解除点抑制。点当前越限时会立即产生活动报警。
+    /// </summary>
+    /// <param name="pointName">短名或限定名。</param>
+    void Unsuppress(string pointName);
+
+    /// <summary>指定点当前是否被抑制。</summary>
+    bool IsSuppressed(string pointName);
 }

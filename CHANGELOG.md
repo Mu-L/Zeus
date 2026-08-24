@@ -1,5 +1,31 @@
 # 更新记录
 
+## 0.19.0
+
+补齐操作员报警队列、面向 ViewModel 的绑定，以及宿主生命周期与窗口解耦。
+
+### 包含
+
+- 报警：`PointAlarmSeverity`；限值可带区域与默认责任人；`Assign` / `Shelve` / `Unshelve` / `Suppress` / `Unsuppress`
+- JSON：`alarmSeverity`、`alarmArea`、`alarmAssignee`
+- 界面：`SynchronizationContextUiDispatcher`、`WpfUiDispatcher.Current`、`PointTableBindingSource`；ViewModel 不必再拿控件取 Dispatcher
+- 生命周期：`UiHostAttachMode.Manual`；`host.AttachZeus()` 不绑窗口。窗口模式仍是默认，适合单窗口演示
+
+### 行为变化
+
+- 活动报警按严重等级降序、产生时间升序
+- 搁置中的记录不出现在 `Alarms.Active`
+- 抑制中的点越限不进队列
+
+### 破坏性变更
+
+- 桌面绑定：删除 `BindTo` 别名；WinForms 统一使用控件绑定 `BindText`
+- WPF：删除控件级绑定扩展，统一使用 `AttachZeus`、`WpfUiDispatcher` 和 MVVM 绑定源
+- 点表历史：删除内置采样历史、`GetHistory`、`IPointHistoryStore`、`FilePointHistoryStore`、`AddPointHistoryFile`、`AddPointHistoryStore` 和 JSON `pointHistoryFile`
+- 趋势绑定：删除 `PointHistoryBindingSource`、`BindHistory`、`BindChart`、`BindDashboard`、`AsHistoryBindingSource`、`PointChartSample` 和 `PointDashboardSnapshot`；历史存储与图表序列由业务层订阅 `Changed` / `BatchChanged` 后自行维护
+- EtherNet/IP：删除 `AddAllenBradleyEtherNetIp`，统一使用 `AddEtherNetIp`
+- Omron FINS：删除 `AddOmronFinsUdp` / `AddOmronFinsTcp`，统一使用 `AddOmronFins(..., FinsTransport)`
+
 ## 0.18.0
 
 从框架立场补齐上位机真正会交的税：点表查找、一轮刷新、工程值、采集调度、报警回差、JSON 与代码点表对齐，以及配置包与协议解耦。
@@ -60,7 +86,7 @@
 
 ## 0.16.0
 
-补齐 IEC 60870-5-104 链路层 t1/t2/t3 与 k/w 窗口，并加固通道并发、协议接收缓冲和 TCP 服务端暴露面。同时补齐上位机运行时闭环：报警队列、点历史落盘、图表/仪表盘绑定、热重载订阅迁移和 TCP/UDP 会话写入，并加深 Modbus 与 Mitsubishi MC。
+补齐 IEC 60870-5-104 链路层 t1/t2/t3 与 k/w 窗口，并加固通道并发、协议接收缓冲和 TCP 服务端暴露面。同时补齐上位机运行时闭环：报警队列、当时版本的点趋势能力、热重载订阅迁移和 TCP/UDP 会话写入，并加深 Modbus 与 Mitsubishi MC。
 
 ### 包含
 
@@ -69,10 +95,10 @@
 - 协议缓冲：各协议客户端接收缓冲默认上限 1 MiB；FINS/S7/Modbus TCP 长度字段先校验；DL/T 645 与 IEC104 坏帧滑动而不是抛死整轮
 - TCP 服务端：新增 `MaxClients`（默认 32）；默认监听地址改为 `127.0.0.1`，避免未配置时把虚拟从站暴露到全部网卡
 - 运行时：采集循环并行轮询设备；通道打开失败记 Error；热重载中途失败尽量回滚拓扑；桌面关闭改为后台释放宿主
-- 其它上限：S7 虚拟 PLC 限制单个 DB 与块数量；自定义帧收件箱上限；点表历史点数上限；配置指纹不再写入明文密码
+- 其它上限：S7 虚拟 PLC 限制单个 DB 与块数量；自定义帧收件箱上限；配置指纹不再写入明文密码
 - 报警：`IPointAlarmTable` / `app.Alarms`，越限产生活动记录，支持确认、全部确认和自动复归
-- 历史：可选 `AddPointHistoryFile` 或自定义 `IPointHistoryStore`；JSON 可用 `pointHistoryFile` 声明 JSONL 路径
-- 界面：`BindChart`、`BindDashboard`、`BindGauge`、`BindAlarms` 与报警绑定源，WinForms / WPF 均可接到第三方图表
+- 趋势：当时版本曾提供点趋势存储与桌面图表辅助；当前公开面已在 0.19.0 收敛为业务层自行订阅和存储
+- 界面：当时版本曾提供图表辅助、`BindGauge`、`BindAlarms` 与报警绑定源；当前公开面以 WinForms 控件绑定和 WPF MVVM 为准
 - 热重载：通道参数变更重建实例时，把旧实例上的 `DataReceived` / `StateChanged` / `PacketTraced` 迁到同名新通道
 - 会话写入：TCP/UDP 服务端实现 `ISessionChannel`；`DataReceived` 带 `RemoteEndPoint`，可按远端 `WriteAsync`
 - Modbus：功能码 0x2B/0x0E 读设备识别，0x14/0x15 读写文件记录；虚拟从站同步支持
@@ -259,7 +285,7 @@
 ### 包含
 
 - 界面绑定：新增 `PointBindingSource`，投影单点的 `Value`、`Text`、`Error`、`AlarmState`、`IsAlarmed`、`UpdatedAt` 与 `Writable`
-- 界面绑定：新增 `PointHistoryBindingSource` 与 `BindHistory`，可把点表最近成功采样历史推到趋势图或报警时间线
+- 界面绑定：当时版本曾新增点趋势绑定能力；当前公开面已在 0.19.0 删除，趋势数据由业务层自行存储
 - 界面绑定：新增 `IPointTable.BindSnapshot`，可把完整 `PointSnapshot` 封送到 UI 线程
 - 界面绑定：新增点表级 `BindEnabled`，默认按“可写且无错误”控制按钮或控件启用状态
 - WinForms / WPF：新增点表 `AsBindingSource`、报警前景/背景色绑定和 `BindWriteBack` 按钮写回辅助方法
@@ -360,7 +386,7 @@
 - 协议：自定义帧、按匹配器等待应答、Modbus RTU/TCP（功能码 01–06、0F、10、16）
 - 设备与点表：登记设备、周期采集、连续地址合并读取、成功采样历史缓冲、点表报警限
 - 配置：JSON 装载通道与设备；采集间隔可在运行中更新
-- 界面：WinForms / WPF 的 `AttachZeus`、`BindTo`、`AsBindingSource`
+- 界面：WinForms 控件绑定、WPF MVVM 绑定源和 `AttachZeus`
 - 分发包：`0.1.0` NuGet 正式包
 
 ### 已知限制

@@ -13,7 +13,16 @@ public sealed class PointAlarmLimits
     /// <param name="low">低报阈值。值低于该阈值时为 <see cref="PointAlarmState.Low"/>。</param>
     /// <param name="high">高报阈值。值高于该阈值时为 <see cref="PointAlarmState.High"/>。</param>
     /// <param name="deadband">回差。已处于高/低报时，必须回到阈值内侧该距离才复归，避免在阈值附近抖动。</param>
-    public PointAlarmLimits(double? low = null, double? high = null, double deadband = 0)
+    /// <param name="severity">严重等级，默认警告。</param>
+    /// <param name="area">区域或工段，供列表过滤与到人；可省略。</param>
+    /// <param name="defaultAssignee">新报警的默认责任人；可省略。</param>
+    public PointAlarmLimits(
+        double? low = null,
+        double? high = null,
+        double deadband = 0,
+        PointAlarmSeverity severity = PointAlarmSeverity.Warning,
+        string? area = null,
+        string? defaultAssignee = null)
     {
         if (low is null && high is null)
         {
@@ -32,9 +41,17 @@ public sealed class PointAlarmLimits
             throw new ZeusException("报警回差必须是大于或等于 0 的有限数值。");
         }
 
+        if (!Enum.IsDefined(severity))
+        {
+            throw new ZeusException("报警严重等级无效。");
+        }
+
         Low = low;
         High = high;
         Deadband = deadband;
+        Severity = severity;
+        Area = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+        DefaultAssignee = string.IsNullOrWhiteSpace(defaultAssignee) ? null : defaultAssignee.Trim();
     }
 
     /// <summary>低报阈值。</summary>
@@ -45,6 +62,15 @@ public sealed class PointAlarmLimits
 
     /// <summary>回差。已报警时需越过阈值内侧该距离才复归。</summary>
     public double Deadband { get; }
+
+    /// <summary>该点越限时的严重等级。</summary>
+    public PointAlarmSeverity Severity { get; }
+
+    /// <summary>区域或工段。未配置时为 <c>null</c>。</summary>
+    public string? Area { get; }
+
+    /// <summary>新报警的默认责任人。未配置时为 <c>null</c>。</summary>
+    public string? DefaultAssignee { get; }
 
     /// <summary>
     /// 根据当前点值判断报警状态。无历史状态时按瞬时越限计算。

@@ -1,7 +1,7 @@
 namespace Zeus;
 
 /// <summary>
-/// 把点表变化封送到界面。与通道 <c>BindTo</c> 相同：释放句柄即退订。
+/// 把点表变化封送到界面。释放绑定句柄即退订。
 /// </summary>
 public static class PointTableUiExtensions
 {
@@ -53,130 +53,6 @@ public static class PointTableUiExtensions
     }
 
     /// <summary>
-    /// 把指定点的最近成功采样历史推到界面，订阅时会立即推送当前历史。
-    /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="dispatcher">界面调度器。</param>
-    /// <param name="setHistory">在界面线程上接收历史，顺序从旧到新。</param>
-    /// <returns>绑定句柄。</returns>
-    public static IUiBinding BindHistory(
-        this IPointTable table,
-        string pointName,
-        IUiDispatcher dispatcher,
-        Action<IReadOnlyList<PointSnapshot>> setHistory)
-    {
-        ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(dispatcher);
-        ArgumentNullException.ThrowIfNull(setHistory);
-        var key = PointUiFormatting.NormalizePointName(pointName);
-
-        void Apply(IReadOnlyList<PointSnapshot> history)
-        {
-            if (dispatcher.CheckAccess())
-            {
-                setHistory(history);
-                return;
-            }
-
-            dispatcher.Post(() => setHistory(history));
-        }
-
-        void PushHistory(PointDefinition definition)
-        {
-            Apply(table.GetHistory(definition.QualifiedName).ToArray());
-        }
-
-        void OnChanged(object? sender, PointChangedEventArgs e)
-        {
-            if (e.Current.Error is null && PointUiFormatting.Matches(e.Current.Definition, key))
-            {
-                PushHistory(e.Current.Definition);
-            }
-        }
-
-        if (table.All.FirstOrDefault(item => PointUiFormatting.Matches(item.Definition, key)) is { } existing)
-        {
-            PushHistory(existing.Definition);
-        }
-        else
-        {
-            Apply(Array.Empty<PointSnapshot>());
-        }
-
-        table.Changed += OnChanged;
-        return new DelegateUiBinding(() => table.Changed -= OnChanged);
-    }
-
-    /// <summary>
-    /// 把指定点的历史转成趋势图样本并推到界面。订阅时立即推送当前样本。
-    /// 适合 ScottPlot、LiveCharts 等第三方图表：回调里清空序列再按时间戳加点。
-    /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="dispatcher">界面调度器。</param>
-    /// <param name="setSamples">在界面线程上接收时间-数值样本。</param>
-    /// <returns>绑定句柄。</returns>
-    public static IUiBinding BindChart(
-        this IPointTable table,
-        string pointName,
-        IUiDispatcher dispatcher,
-        Action<IReadOnlyList<PointChartSample>> setSamples)
-    {
-        ArgumentNullException.ThrowIfNull(setSamples);
-        return table.BindHistory(pointName, dispatcher, history => setSamples(PointChartFormatting.ToChartSamples(history)));
-    }
-
-    /// <summary>
-    /// 把指定点的当前值、报警和趋势样本一起推到界面，适合仪表盘卡片。
-    /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="dispatcher">界面调度器。</param>
-    /// <param name="setDashboard">在界面线程上接收仪表盘快照。</param>
-    /// <returns>绑定句柄。</returns>
-    public static IUiBinding BindDashboard(
-        this IPointTable table,
-        string pointName,
-        IUiDispatcher dispatcher,
-        Action<PointDashboardSnapshot> setDashboard)
-    {
-        ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(dispatcher);
-        ArgumentNullException.ThrowIfNull(setDashboard);
-        var key = PointUiFormatting.NormalizePointName(pointName);
-
-        void Apply(PointSnapshot snapshot)
-        {
-            var history = table.GetHistory(snapshot.QualifiedName).ToArray();
-            var dashboard = new PointDashboardSnapshot(snapshot, history, PointChartFormatting.ToChartSamples(history));
-            if (dispatcher.CheckAccess())
-            {
-                setDashboard(dashboard);
-                return;
-            }
-
-            dispatcher.Post(() => setDashboard(dashboard));
-        }
-
-        void OnChanged(object? sender, PointChangedEventArgs e)
-        {
-            if (PointUiFormatting.Matches(e.Current.Definition, key))
-            {
-                Apply(e.Current);
-            }
-        }
-
-        if (table.All.FirstOrDefault(item => PointUiFormatting.Matches(item.Definition, key)) is { } existing)
-        {
-            Apply(existing);
-        }
-
-        table.Changed += OnChanged;
-        return new DelegateUiBinding(() => table.Changed -= OnChanged);
-    }
-
-    /// <summary>
     /// 把指定点的当前值按 0–1 比例推到界面，适合进度条或仪表指针。
     /// 默认用报警限作为量程；未配置报警限时需传入 <paramref name="minimum"/> 与 <paramref name="maximum"/>。
     /// </summary>
@@ -191,7 +67,7 @@ public static class PointTableUiExtensions
         ArgumentNullException.ThrowIfNull(setRatio);
         return table.BindSnapshot(pointName, dispatcher, snapshot =>
         {
-            if (!PointChartFormatting.TryToDouble(snapshot.Value, out var value))
+            if (!TryToDouble(snapshot.Value, out var value))
             {
                 setRatio(0);
                 return;
@@ -284,18 +160,12 @@ public static class PointTableUiExtensions
     }
 
     /// <summary>
-    /// 创建单个点的历史采样投影，属性变更会封送到 <paramref name="dispatcher"/>。
+    /// 创建整张点表的可绑定投影。ViewModel 应持有本对象，用 <see cref="SynchronizationContextUiDispatcher"/> 封送，不必再绑到某个控件。
     /// </summary>
-    /// <param name="table">宿主点表。</param>
-    /// <param name="pointName">短名或 <c>设备.点</c>。</param>
-    /// <param name="dispatcher">界面调度器。测试可传入 <see cref="ImmediateUiDispatcher"/>。</param>
-    public static PointHistoryBindingSource AsHistoryBindingSource(
-        this IPointTable table,
-        string pointName,
-        IUiDispatcher? dispatcher = null)
+    public static PointTableBindingSource AsTableBindingSource(this IPointTable table, IUiDispatcher? dispatcher = null)
     {
         ArgumentNullException.ThrowIfNull(table);
-        return new PointHistoryBindingSource(table, pointName, dispatcher);
+        return new PointTableBindingSource(table, dispatcher);
     }
 
     /// <summary>
@@ -337,5 +207,24 @@ public static class PointTableUiExtensions
     {
         ArgumentNullException.ThrowIfNull(alarms);
         return new PointAlarmBindingSource(alarms, dispatcher);
+    }
+
+    private static bool TryToDouble(object? value, out double result)
+    {
+        result = 0;
+        if (value is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            result = Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
+            return !double.IsNaN(result) && !double.IsInfinity(result);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }

@@ -29,10 +29,7 @@ public sealed class ZeusHostBuilder
         Services.AddSingleton<ZeusHostAccessor>();
         Services.AddSingleton(sp => new PointTable(
             sp.GetRequiredService<DeviceRegistry>(),
-            historyCapacity: 128,
-            maxHistoryPoints: 4096,
-            store: sp.GetService<IPointHistoryStore>(),
-            logger: sp.GetService<ILogger<PointTable>>()));
+            sp.GetService<ILogger<PointTable>>()));
         Services.AddSingleton<IPointTable>(sp => sp.GetRequiredService<PointTable>());
         Services.AddSingleton<IPointTableWriter>(sp => sp.GetRequiredService<PointTable>());
         Services.AddSingleton(sp => new PointAlarmTable(sp.GetRequiredService<PointTable>()));

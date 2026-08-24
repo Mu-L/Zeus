@@ -202,11 +202,7 @@ namespace Zeus
     }
     public static class ZeusHostBuilderFinsExtensions
     {
-        public static Zeus.FinsDevice AddOmronFins(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.FinsTransport transport = 0, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
-        public static Zeus.ZeusHostBuilder AddOmronFins(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.FinsTransport transport = 0, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
-        public static Zeus.FinsDevice AddOmronFinsTcp(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
-        public static Zeus.ZeusHostBuilder AddOmronFinsTcp(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
-        public static Zeus.FinsDevice AddOmronFinsUdp(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
-        public static Zeus.ZeusHostBuilder AddOmronFinsUdp(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
+        public static Zeus.FinsDevice AddOmronFins(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.FinsTransport transport, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
+        public static Zeus.ZeusHostBuilder AddOmronFins(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.FinsTransport transport, Zeus.FinsOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.FinsPointMap>? points = null) { }
     }
 }

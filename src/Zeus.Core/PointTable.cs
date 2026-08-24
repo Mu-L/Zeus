@@ -8,18 +8,11 @@ namespace Zeus;
 /// </summary>
 public sealed class PointTable : IPointTable, IPointTableWriter
 {
-    private const int DefaultHistoryCapacity = 128;
-    private const int DefaultMaxHistoryPoints = 4096;
-
     private readonly object _gate = new();
-    private readonly int _historyCapacity;
-    private readonly int _maxHistoryPoints;
     private readonly IDeviceRegistry? _devices;
-    private readonly IPointHistoryStore? _store;
     private readonly ILogger _logger;
     private readonly List<string> _order = [];
     private readonly Dictionary<string, PointSnapshot> _byQualified = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<PointSnapshot>> _history = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _shortToQualified = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _ambiguousShortNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(string Pattern, EventHandler<PointChangedEventArgs> Handler)> _subscriptions = [];
@@ -29,9 +22,8 @@ public sealed class PointTable : IPointTable, IPointTableWriter
     /// <summary>
     /// 创建未连接设备目录的点表。可以读写快照，但不能 <see cref="WriteAsync"/>。
     /// </summary>
-    /// <param name="historyCapacity">每个点保留的最近成功采样数。设为 0 可关闭历史缓冲。</param>
-    public PointTable(int historyCapacity = DefaultHistoryCapacity)
-        : this(null, historyCapacity)
+    public PointTable()
+        : this(null, null)
     {
     }
 
@@ -39,68 +31,19 @@ public sealed class PointTable : IPointTable, IPointTableWriter
     /// 创建连接到设备目录的点表。宿主通过本构造函数注入目录，以便按点名路由写回。
     /// </summary>
     /// <param name="devices">设备目录。为 <c>null</c> 时禁止写回。</param>
-    /// <param name="historyCapacity">每个点保留的最近成功采样数。设为 0 可关闭历史缓冲。</param>
-    public PointTable(IDeviceRegistry? devices, int historyCapacity = DefaultHistoryCapacity)
-        : this(devices, historyCapacity, DefaultMaxHistoryPoints)
+    public PointTable(IDeviceRegistry? devices)
+        : this(devices, null)
     {
     }
 
     /// <summary>
-    /// 创建连接到设备目录的点表，并限制历史点数量，避免上千点时内存无界增长。
+    /// 创建连接到设备目录的点表，并配置诊断日志。
     /// </summary>
     /// <param name="devices">设备目录。为 <c>null</c> 时禁止写回。</param>
-    /// <param name="historyCapacity">每个点保留的最近成功采样数。设为 0 可关闭历史缓冲。</param>
-    /// <param name="maxHistoryPoints">允许保留历史的最大点数；超出后新点不再记历史。</param>
-    public PointTable(IDeviceRegistry? devices, int historyCapacity, int maxHistoryPoints)
-        : this(devices, historyCapacity, maxHistoryPoints, null)
-    {
-    }
-
-    /// <summary>
-    /// 创建连接到设备目录的点表，并可把成功采样交给可插拔存储。
-    /// </summary>
-    /// <param name="devices">设备目录。为 <c>null</c> 时禁止写回。</param>
-    /// <param name="historyCapacity">每个点保留的最近成功采样数。设为 0 可关闭历史缓冲。</param>
-    /// <param name="maxHistoryPoints">允许保留历史的最大点数；超出后新点不再记历史。</param>
-    /// <param name="store">可选落盘。为 <c>null</c> 时只保留内存历史。</param>
-    public PointTable(
-        IDeviceRegistry? devices,
-        int historyCapacity,
-        int maxHistoryPoints,
-        IPointHistoryStore? store)
-        : this(devices, historyCapacity, maxHistoryPoints, store, null)
-    {
-    }
-
-    /// <summary>
-    /// 创建连接到设备目录的点表，并可把成功采样交给可插拔存储。
-    /// </summary>
-    /// <param name="devices">设备目录。为 <c>null</c> 时禁止写回。</param>
-    /// <param name="historyCapacity">每个点保留的最近成功采样数。设为 0 可关闭历史缓冲。</param>
-    /// <param name="maxHistoryPoints">允许保留历史的最大点数；超出后新点不再记历史。</param>
-    /// <param name="store">可选落盘。为 <c>null</c> 时只保留内存历史。</param>
     /// <param name="logger">写回失败时的诊断日志。允许为 <c>null</c>。</param>
-    public PointTable(
-        IDeviceRegistry? devices,
-        int historyCapacity,
-        int maxHistoryPoints,
-        IPointHistoryStore? store,
-        ILogger? logger)
+    public PointTable(IDeviceRegistry? devices, ILogger? logger)
     {
-        if (historyCapacity < 0)
-        {
-            throw new ZeusException("点表历史容量不能为负数。");
-        }
-
-        if (maxHistoryPoints < 0)
-        {
-            throw new ZeusException("点表历史点数上限不能为负数。");
-        }
-
         _devices = devices;
-        _historyCapacity = historyCapacity;
-        _maxHistoryPoints = maxHistoryPoints;
-        _store = store;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         if (devices is not null)
         {
@@ -112,9 +55,6 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             }
         }
     }
-
-    /// <summary>每个点最多保留的最近成功采样数。</summary>
-    public int HistoryCapacity => _historyCapacity;
 
     /// <inheritdoc />
     public event EventHandler<PointChangedEventArgs>? Changed;
@@ -221,22 +161,6 @@ public sealed class PointTable : IPointTable, IPointTableWriter
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<PointSnapshot> GetHistory(string name)
-    {
-        if (!TryResolveQualifiedName(name, out var qualifiedName) || qualifiedName is null)
-        {
-            throw CreateMissingException(name);
-        }
-
-        lock (_gate)
-        {
-            return _history.TryGetValue(qualifiedName, out var items)
-                ? items.ToArray()
-                : Array.Empty<PointSnapshot>();
-        }
-    }
-
-    /// <inheritdoc />
     public void Register(PointDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -249,7 +173,6 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             }
 
             _byQualified[definition.QualifiedName] = new PointSnapshot(definition, null, null, null);
-            _history[definition.QualifiedName] = [];
             _order.Add(definition.QualifiedName);
 
             if (_ambiguousShortNames.Contains(definition.Name))
@@ -289,10 +212,8 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             previous = existing;
             current = new PointSnapshot(existing.Definition, value, DateTimeOffset.Now, null, existing.AlarmState);
             _byQualified[qualifiedName] = current;
-            AddHistory(current);
         }
 
-        PersistHistory(current);
         RaiseChanged(previous, current);
     }
 
@@ -405,7 +326,6 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             return;
         }
 
-        _history.Remove(qualifiedName);
         _order.Remove(qualifiedName);
         RebuildShortNameIndex(snapshot.Definition.Name);
     }
@@ -440,56 +360,6 @@ public sealed class PointTable : IPointTable, IPointTableWriter
         if (unique is not null)
         {
             _shortToQualified[shortName] = unique;
-        }
-    }
-
-    private void AddHistory(PointSnapshot snapshot)
-    {
-        if (_historyCapacity == 0)
-        {
-            return;
-        }
-
-        if (!_history.TryGetValue(snapshot.QualifiedName, out var items))
-        {
-            if (_history.Count >= _maxHistoryPoints)
-            {
-                return;
-            }
-
-            items = [];
-            _history[snapshot.QualifiedName] = items;
-        }
-
-        items.Add(snapshot);
-        if (items.Count > _historyCapacity)
-        {
-            items.RemoveRange(0, items.Count - _historyCapacity);
-        }
-    }
-
-    /// <summary>
-    /// 把成功采样交给可插拔存储。失败不得打断采集循环。
-    /// </summary>
-    private void PersistHistory(PointSnapshot snapshot)
-    {
-        if (_store is null)
-        {
-            return;
-        }
-
-        _ = PersistHistoryAsync(snapshot);
-    }
-
-    private async Task PersistHistoryAsync(PointSnapshot snapshot)
-    {
-        try
-        {
-            await _store!.AppendAsync(snapshot).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // 落盘失败只影响持久化，点表现值和内存历史仍可用。
         }
     }
 

@@ -20,7 +20,7 @@ public sealed class FinsTests
         await using var host = ZeusHost.Create(builder =>
         {
             builder.AddVirtualChannel("fins-link", new FinsSlaveResponder(FinsTransport.Udp, memory));
-            builder.AddOmronFinsUdp("plc", "fins-link", new FinsOptions
+            builder.AddOmronFins("plc", "fins-link", FinsTransport.Udp, new FinsOptions
             {
                 SourceNode = 10,
                 DestinationNode = 1
@@ -65,7 +65,7 @@ public sealed class FinsTests
         await using var host = ZeusHost.Create(builder =>
         {
             builder.AddVirtualChannel("fins-tcp", new FinsSlaveResponder(FinsTransport.Tcp, memory, slaveOptions));
-            builder.AddOmronFinsTcp("plc", "fins-tcp", new FinsOptions { TcpRequestedClientNode = 7 });
+            builder.AddOmronFins("plc", "fins-tcp", FinsTransport.Tcp, new FinsOptions { TcpRequestedClientNode = 7 });
         });
 
         await host.StartAsync();
@@ -90,7 +90,7 @@ public sealed class FinsTests
         {
             builder.AddAcquisition(TimeSpan.FromMilliseconds(50));
             builder.AddVirtualChannel("fins-link", new FinsSlaveResponder(FinsTransport.Udp, memory));
-            builder.AddOmronFinsUdp("plc", "fins-link", new FinsOptions { SourceNode = 10, DestinationNode = 1 }, points: map => map
+            builder.AddOmronFins("plc", "fins-link", FinsTransport.Udp, new FinsOptions { SourceNode = 10, DestinationNode = 1 }, points: map => map
                 .DmWord("temperature", 100, 0.1).Writable("temperature")
                 .CioBit("running", 10, 0).Writable("running"));
         });
@@ -158,7 +158,7 @@ public sealed class FinsTests
         await using var host = ZeusHost.Create(builder =>
         {
             builder.AddVirtualChannel("fins-link", new FinsSlaveResponder(FinsTransport.Udp, memory));
-            builder.AddOmronFinsUdp("plc", "fins-link", new FinsOptions { SourceNode = 10, DestinationNode = 1 });
+            builder.AddOmronFins("plc", "fins-link", FinsTransport.Udp, new FinsOptions { SourceNode = 10, DestinationNode = 1 });
         });
 
         await host.StartAsync();

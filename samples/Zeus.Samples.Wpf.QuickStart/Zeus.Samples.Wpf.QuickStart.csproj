@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- WPF 快速上手：演示 AttachZeus、BindTo 与 AsBindingSource。 -->
+  <!-- WPF 快速上手：演示 AttachZeus、WpfUiDispatcher 与 MVVM BindingSource。 -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -13,6 +13,11 @@
     <ProjectReference Include="..\..\src\Zeus.Communications\Zeus.Communications.csproj" />
     <ProjectReference Include="..\..\src\Zeus.Core\Zeus.Core.csproj" />
     <ProjectReference Include="..\..\src\Zeus.Presentation.Wpf\Zeus.Presentation.Wpf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
   </ItemGroup>
 
 </Project>

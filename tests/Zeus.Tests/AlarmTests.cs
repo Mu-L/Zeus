@@ -1,12 +1,11 @@
-using System.Text.Json;
 using Zeus;
 
 namespace Zeus.Tests;
 
 /// <summary>
-/// 验证报警队列、确认/复归与点历史落盘。
+/// 验证报警队列、确认与复归。
 /// </summary>
-public sealed class AlarmAndHistoryTests
+public sealed class AlarmTests
 {
     /// <summary>
     /// 点越限应产生活动报警，回到正常范围后自动复归。
@@ -81,32 +80,4 @@ public sealed class AlarmAndHistoryTests
         Assert.Equal(PointAlarmStatus.Acknowledged, host.Alarms.Active[0].Status);
     }
 
-    /// <summary>
-    /// 文件历史存储应把成功采样写成 JSONL。
-    /// </summary>
-    [Fact]
-    public async Task FilePointHistoryStore_AppendsJsonLines()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"zeus-history-{Guid.NewGuid():N}.jsonl");
-        try
-        {
-            await using var store = new FilePointHistoryStore(path);
-            var table = new PointTable(null, 8, 64, store);
-            table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
-            table.Publish("oven.pv", (ushort)12);
-            await Task.Delay(100);
-
-            var line = (await File.ReadAllTextAsync(path)).Trim();
-            using var document = JsonDocument.Parse(line);
-            Assert.Equal("oven.pv", document.RootElement.GetProperty("qualifiedName").GetString());
-            Assert.Equal("12", document.RootElement.GetProperty("value").GetString());
-        }
-        finally
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
 }

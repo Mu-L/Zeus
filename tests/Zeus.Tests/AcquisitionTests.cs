@@ -170,50 +170,6 @@ public sealed class AcquisitionTests
     }
 
     /// <summary>
-    /// 点表历史只保留成功采样，并按容量裁剪旧样本。
-    /// </summary>
-    [Fact]
-    public void PointTable_HistoryKeepsRecentSuccessfulSamples()
-    {
-        var table = new PointTable(historyCapacity: 2);
-        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
-
-        table.Publish("oven.pv", (ushort)10);
-        table.Publish("oven.pv", (ushort)20);
-        table.Publish("oven.pv", (ushort)30);
-
-        var history = table.GetHistory("pv");
-        Assert.Equal(2, history.Count);
-        Assert.Equal((ushort)20, history[0].Value);
-        Assert.Equal((ushort)30, history[1].Value);
-        Assert.All(history, item =>
-        {
-            Assert.Null(item.Error);
-            Assert.NotNull(item.UpdatedAt);
-        });
-    }
-
-    /// <summary>
-    /// 采集错误会更新当前快照，但不会污染成功采样历史。
-    /// </summary>
-    [Fact]
-    public void PointTable_HistoryIgnoresErrors()
-    {
-        var table = new PointTable(historyCapacity: 4);
-        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
-
-        table.Publish("oven.pv", (ushort)12);
-        table.PublishError("oven.pv", "从站超时");
-
-        var current = table.Get("pv");
-        var history = table.GetHistory("pv");
-        Assert.Equal("从站超时", current.Error);
-        Assert.Single(history);
-        Assert.Equal((ushort)12, history[0].Value);
-        Assert.Null(history[0].Error);
-    }
-
-    /// <summary>
     /// 卸载设备后，点表应摘除该设备的点，并恢复被占用的短名。
     /// </summary>
     [Fact]

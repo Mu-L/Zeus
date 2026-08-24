@@ -183,7 +183,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                         map.HoldingRegister(point.Name, (ushort)point.Address, holdingScale);
                         if (alarmLimits is not null)
                         {
-                            map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
+                            map.WithAlarmLimits(point.Name, alarmLimits);
                         }
                     }
                     else
@@ -191,7 +191,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                         map.HoldingRegister(point.Name, (ushort)point.Address);
                         if (alarmLimits is not null)
                         {
-                            map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
+                            map.WithAlarmLimits(point.Name, alarmLimits);
                         }
                     }
 
@@ -211,7 +211,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                         map.InputRegister(point.Name, (ushort)point.Address, inputScale);
                         if (alarmLimits is not null)
                         {
-                            map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
+                            map.WithAlarmLimits(point.Name, alarmLimits);
                         }
                     }
                     else
@@ -219,7 +219,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                         map.InputRegister(point.Name, (ushort)point.Address);
                         if (alarmLimits is not null)
                         {
-                            map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
+                            map.WithAlarmLimits(point.Name, alarmLimits);
                         }
                     }
 

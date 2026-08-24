@@ -67,13 +67,6 @@ public interface IPointTable
     bool TryGet<T>(string name, out T? value);
 
     /// <summary>
-    /// 读取指定点最近的成功采样历史，顺序从旧到新。错误采集不会写入历史。
-    /// 若登记了 <see cref="IPointHistoryStore"/>，此处仍返回内存环形缓冲；持久化历史请直接查存储。
-    /// </summary>
-    /// <param name="name">点名或限定名。</param>
-    IReadOnlyList<PointSnapshot> GetHistory(string name);
-
-    /// <summary>
     /// 按点名把工程值写回所属设备。界面与业务应走这条路径，而不是直接拼寄存器地址。
     /// 点必须声明为可写，且所属设备实现 <see cref="IPointWriter"/>。
     /// </summary>

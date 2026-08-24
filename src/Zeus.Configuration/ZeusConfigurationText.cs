@@ -56,8 +56,27 @@ public static class ZeusConfigurationText
     /// </summary>
     public static PointAlarmLimits? CreateAlarmLimits(PointConfiguration point)
         => point.LowAlarmLimit is not null || point.HighAlarmLimit is not null
-            ? new PointAlarmLimits(point.LowAlarmLimit, point.HighAlarmLimit, point.Deadband)
+            ? new PointAlarmLimits(
+                point.LowAlarmLimit,
+                point.HighAlarmLimit,
+                point.Deadband,
+                ParseSeverity(point.AlarmSeverity),
+                point.AlarmArea,
+                point.AlarmAssignee)
             : null;
+
+    /// <summary>
+    /// 解析 JSON 中的报警严重等级。省略或空为警告。
+    /// </summary>
+    public static PointAlarmSeverity ParseSeverity(string? value)
+        => Normalize(value) switch
+        {
+            "" or "warning" => PointAlarmSeverity.Warning,
+            "info" => PointAlarmSeverity.Info,
+            "alarm" => PointAlarmSeverity.Alarm,
+            "critical" => PointAlarmSeverity.Critical,
+            _ => throw new ZeusException($"alarmSeverity「{value}」不受支持。可选 info、warning、alarm、critical。")
+        };
 
     /// <summary>
     /// 点表指纹，供热更新判断设备是否需要重建。
@@ -83,5 +102,8 @@ public static class ZeusConfigurationText
             point.LowAlarmLimit,
             point.HighAlarmLimit,
             point.Deadband,
+            Normalize(point.AlarmSeverity),
+            point.AlarmArea,
+            point.AlarmAssignee,
             point.Writable);
 }

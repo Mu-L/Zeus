@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- WinForms 快速上手：演示 AttachZeus 与 BindTo，业务与界面通过通道事件连接。 -->
+  <!-- WinForms 快速上手：演示 AttachZeus 与 BindText，业务与界面通过通道事件连接。 -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>

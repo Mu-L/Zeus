@@ -13,7 +13,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -22,30 +21,26 @@
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="发送" />
-        <TextBox x:Name="InputBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" Text="PING" />
+        <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" Text="{Binding Payload, UpdateSourceTrigger=PropertyChanged}" />
 
-        <Button Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Content="发送" Click="OnSendClick" />
+        <Button Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Content="发送" Command="{Binding SendCommand}" />
 
         <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="状态" />
-        <TextBlock x:Name="StateText" Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Text="{Binding Meter.StateText}" />
 
         <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="回显" />
-        <TextBlock x:Name="EchoText" Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" Text="{Binding Meter.LastText}" />
 
         <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="温度" />
-        <TextBlock x:Name="TemperatureText" Grid.Row="4" Grid.Column="1" Padding="4" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="4" Grid.Column="1" Padding="4" VerticalAlignment="Center" Text="{Binding Temperature.Text}" />
 
         <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center" Text="报警" />
-        <TextBlock x:Name="AlarmText" Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="5" Grid.Column="1" VerticalAlignment="Center" Text="{Binding Temperature.AlarmState}" />
 
-        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="历史" />
-        <TextBlock x:Name="HistoryText" Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" />
-
-        <Button x:Name="ToggleTemperatureButton"
-                Grid.Row="7"
+        <Button Grid.Row="6"
                 Grid.Column="1"
                 Margin="0,8,0,0"
-                Content="模拟高温"
-                Click="OnToggleTemperatureClick" />
+                Content="{Binding ToggleTemperatureText}"
+                Command="{Binding ToggleTemperatureCommand}" />
     </Grid>
 </Window>

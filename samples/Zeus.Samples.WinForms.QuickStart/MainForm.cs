@@ -17,7 +17,6 @@ public sealed class MainForm : Form
     private readonly Label _echo = new();
     private readonly Label _temperature = new();
     private readonly Label _alarm = new();
-    private readonly Label _history = new();
     private readonly Button _toggleTemperature = new();
     private readonly IChannel _meter;
     private bool _highTemperature;
@@ -37,12 +36,11 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 8,
+            RowCount = 7,
             Padding = new Padding(16)
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
@@ -63,8 +61,6 @@ public sealed class MainForm : Form
         _temperature.TextAlign = ContentAlignment.MiddleLeft;
         _alarm.Dock = DockStyle.Fill;
         _alarm.TextAlign = ContentAlignment.MiddleLeft;
-        _history.Dock = DockStyle.Fill;
-        _history.TextAlign = ContentAlignment.MiddleLeft;
         _toggleTemperature.Text = "模拟高温";
         _toggleTemperature.Dock = DockStyle.Fill;
 
@@ -79,15 +75,13 @@ public sealed class MainForm : Form
         layout.Controls.Add(_temperature, 1, 4);
         layout.Controls.Add(new Label { Text = "报警", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 5);
         layout.Controls.Add(_alarm, 1, 5);
-        layout.Controls.Add(new Label { Text = "历史", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 6);
-        layout.Controls.Add(_history, 1, 6);
-        layout.Controls.Add(_toggleTemperature, 1, 7);
+        layout.Controls.Add(_toggleTemperature, 1, 6);
         Controls.Add(layout);
 
         var attachment = this.AttachZeus(builder => builder.AddVirtualChannel("meter"));
         _meter = attachment.Host.Channels.Get("meter");
         _meter.BindState(_state);
-        _meter.BindTo(_echo);
+        _meter.BindText(_echo);
         _send.Click += async (_, _) => await SendAsync();
 
         var pointWriter = (IPointTableWriter)_points;
@@ -98,10 +92,9 @@ public sealed class MainForm : Form
             new PointAlarmLimits(high: 80),
             writable: false));
         pointWriter.Publish("oven.temperature", 72.5d);
-        _points.BindTo("temperature", _temperature, FormatTemperature);
+        _points.BindText("temperature", _temperature, FormatTemperature);
         _points.BindAlarmBackColor("temperature", _temperature);
         _points.BindSnapshot("temperature", _alarm, snapshot => _alarm.Text = snapshot.AlarmState.ToString());
-        _points.BindHistory("temperature", _history, history => _history.Text = FormatHistory(history));
         _toggleTemperature.Click += (_, _) => ToggleTemperature(pointWriter);
     }
 
@@ -137,16 +130,4 @@ public sealed class MainForm : Form
         return Convert.ToDouble(value, CultureInfo.InvariantCulture).ToString("0.0", CultureInfo.InvariantCulture) + " C";
     }
 
-    private static string FormatHistory(IReadOnlyList<PointSnapshot> history)
-    {
-        if (history.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var items = history
-            .TakeLast(4)
-            .Select(snapshot => FormatTemperature(snapshot.Value) + " " + snapshot.AlarmState);
-        return string.Join(" -> ", items);
-    }
 }

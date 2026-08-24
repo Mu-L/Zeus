@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Threading;
 
 namespace Zeus;
@@ -31,5 +32,14 @@ public sealed class WpfUiDispatcher : IUiDispatcher
         }
 
         _dispatcher.BeginInvoke(action);
+    }
+
+    /// <summary>
+    /// 当前应用程序的 UI 调度器。ViewModel 可在不持有控件时使用本方法。
+    /// </summary>
+    public static WpfUiDispatcher Current()
+    {
+        var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        return new WpfUiDispatcher(dispatcher);
     }
 }

@@ -111,8 +111,6 @@ namespace Zeus
     }
     public static class ZeusHostBuilderEtherNetIpExtensions
     {
-        public static Zeus.EtherNetIpDevice AddAllenBradleyEtherNetIp(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.EtherNetIpOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.EtherNetIpPointMap>? points = null) { }
-        public static Zeus.ZeusHostBuilder AddAllenBradleyEtherNetIp(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.EtherNetIpOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.EtherNetIpPointMap>? points = null) { }
         public static Zeus.EtherNetIpDevice AddEtherNetIp(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.EtherNetIpOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.EtherNetIpPointMap>? points = null) { }
         public static Zeus.ZeusHostBuilder AddEtherNetIp(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.EtherNetIpOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.EtherNetIpPointMap>? points = null) { }
     }

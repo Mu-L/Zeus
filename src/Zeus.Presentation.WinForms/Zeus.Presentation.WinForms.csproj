@@ -6,8 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>Zeus</RootNamespace>
     <AssemblyName>Zeus.Presentation.WinForms</AssemblyName>
-    <Description>Zeus WinForms 适配器：AttachZeus、BindTo 与 UI 线程封送。</Description>
-    <PackageDescription>Zeus WinForms 适配器：AttachZeus、BindTo 与 UI 线程封送。</PackageDescription>
+    <Description>Zeus WinForms 适配器：AttachZeus、BindText 与控件线程封送。</Description>
+    <PackageDescription>Zeus WinForms 适配器：AttachZeus、BindText 与控件线程封送。</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>

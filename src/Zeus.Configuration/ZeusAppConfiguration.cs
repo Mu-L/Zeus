@@ -22,10 +22,6 @@ public sealed class ZeusAppConfiguration
     /// <summary>设备列表。引用的通道必须先出现在 <see cref="Channels"/> 中。</summary>
     public List<DeviceConfiguration> Devices { get; set; } = [];
 
-    /// <summary>
-    /// 成功采样落盘的 JSONL 路径。省略时只保留内存历史。
-    /// </summary>
-    public string? PointHistoryFile { get; set; }
 }
 
 /// <summary>
@@ -386,6 +382,17 @@ public sealed class PointConfiguration
     /// 报警回差。已越限后必须回到阈值内侧该距离才复归。省略为 0。
     /// </summary>
     public double Deadband { get; set; }
+
+    /// <summary>
+    /// 报警严重等级：<c>info</c>、<c>warning</c>、<c>alarm</c>、<c>critical</c>。省略为 warning。
+    /// </summary>
+    public string? AlarmSeverity { get; set; }
+
+    /// <summary>报警区域或工段，供列表过滤与到人。</summary>
+    public string? AlarmArea { get; set; }
+
+    /// <summary>新报警的默认责任人。</summary>
+    public string? AlarmAssignee { get; set; }
 
     /// <summary>
     /// 是否允许按点名写回。默认 false。

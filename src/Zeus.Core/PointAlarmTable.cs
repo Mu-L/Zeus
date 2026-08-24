@@ -2,15 +2,18 @@ namespace Zeus;
 
 /// <summary>
 /// 内存报警队列。同一点同时只保留一条未复归记录；复归后进入有上限的历史。
+/// 支持严重等级、责任人、搁置与点抑制。
 /// </summary>
 public sealed class PointAlarmTable : IPointAlarmTable
 {
     private const int DefaultHistoryCapacity = 256;
     private readonly object _gate = new();
     private readonly int _historyCapacity;
+    private readonly IPointTable _points;
     private readonly Dictionary<string, PointAlarmRecord> _activeByPoint = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, string> _idToPoint = [];
     private readonly List<PointAlarmRecord> _history = [];
+    private readonly HashSet<string> _suppressed = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 创建报警队列并订阅点表变化。
@@ -25,6 +28,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             throw new ZeusException("报警历史容量不能为负数。");
         }
 
+        _points = points;
         _historyCapacity = historyCapacity;
         points.Changed += OnPointChanged;
     }
@@ -39,8 +43,11 @@ public sealed class PointAlarmTable : IPointAlarmTable
         {
             lock (_gate)
             {
+                ExpireShelvesLocked(DateTimeOffset.Now);
                 return _activeByPoint.Values
-                    .OrderBy(item => item.RaisedAt)
+                    .Where(item => item.IsOpen)
+                    .OrderByDescending(item => item.Severity)
+                    .ThenBy(item => item.RaisedAt)
                     .ToArray();
             }
         }
@@ -65,12 +72,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
         PointAlarmRecord current;
         lock (_gate)
         {
-            if (!_idToPoint.TryGetValue(id, out var qualified)
-                || !_activeByPoint.TryGetValue(qualified, out var existing))
-            {
-                throw new ZeusException($"找不到标识为 {id} 的活动报警。请确认该报警尚未复归。");
-            }
-
+            var existing = RequireOpen(id);
             previous = existing;
             current = AcknowledgeLocked(existing, acknowledgedBy);
         }
@@ -95,11 +97,8 @@ public sealed class PointAlarmTable : IPointAlarmTable
         PointAlarmRecord current;
         lock (_gate)
         {
-            var key = pointName.Trim();
-            var existing = _activeByPoint.Values.FirstOrDefault(item =>
-                item.QualifiedName.Equals(key, StringComparison.OrdinalIgnoreCase)
-                || item.PointName.Equals(key, StringComparison.OrdinalIgnoreCase));
-            if (existing is null)
+            var existing = FindByNameLocked(pointName.Trim());
+            if (existing is null || !existing.IsOpen)
             {
                 return null;
             }
@@ -122,7 +121,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
         var changes = new List<(PointAlarmRecord Previous, PointAlarmRecord Current)>();
         lock (_gate)
         {
-            foreach (var existing in _activeByPoint.Values.ToArray())
+            foreach (var existing in _activeByPoint.Values.Where(item => item.IsOpen).ToArray())
             {
                 var updated = AcknowledgeLocked(existing, acknowledgedBy);
                 if (!ReferenceEquals(existing, updated))
@@ -138,6 +137,165 @@ public sealed class PointAlarmTable : IPointAlarmTable
         }
 
         return changes.Select(item => item.Current).ToArray();
+    }
+
+    /// <inheritdoc />
+    public PointAlarmRecord Assign(Guid id, string? assignee)
+    {
+        PointAlarmRecord previous;
+        PointAlarmRecord current;
+        lock (_gate)
+        {
+            previous = RequireStored(id);
+            current = Clone(
+                previous,
+                previous.Status,
+                previous.Value,
+                previous.AcknowledgedAt,
+                previous.ClearedAt,
+                previous.AcknowledgedBy,
+                string.IsNullOrWhiteSpace(assignee) ? null : assignee.Trim(),
+                previous.ShelvedUntil,
+                previous.Suppressed);
+            _activeByPoint[previous.QualifiedName] = current;
+        }
+
+        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        return current;
+    }
+
+    /// <inheritdoc />
+    public PointAlarmRecord Shelve(Guid id, DateTimeOffset until)
+    {
+        if (until <= DateTimeOffset.Now)
+        {
+            throw new ZeusException("搁置截止时间必须晚于当前时间。");
+        }
+
+        PointAlarmRecord previous;
+        PointAlarmRecord current;
+        lock (_gate)
+        {
+            previous = RequireOpen(id);
+            current = Clone(
+                previous,
+                PointAlarmStatus.Shelved,
+                previous.Value,
+                previous.AcknowledgedAt,
+                previous.ClearedAt,
+                previous.AcknowledgedBy,
+                previous.Assignee,
+                until,
+                previous.Suppressed);
+            _activeByPoint[previous.QualifiedName] = current;
+        }
+
+        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        return current;
+    }
+
+    /// <inheritdoc />
+    public PointAlarmRecord Unshelve(Guid id)
+    {
+        PointAlarmRecord previous;
+        PointAlarmRecord current;
+        lock (_gate)
+        {
+            previous = RequireStored(id);
+            if (previous.Status != PointAlarmStatus.Shelved)
+            {
+                return previous;
+            }
+
+            current = Clone(
+                previous,
+                previous.AcknowledgedAt is null ? PointAlarmStatus.Active : PointAlarmStatus.Acknowledged,
+                previous.Value,
+                previous.AcknowledgedAt,
+                previous.ClearedAt,
+                previous.AcknowledgedBy,
+                previous.Assignee,
+                null,
+                previous.Suppressed);
+            _activeByPoint[previous.QualifiedName] = current;
+        }
+
+        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        return current;
+    }
+
+    /// <inheritdoc />
+    public void Suppress(string pointName)
+    {
+        var key = ResolvePointKey(pointName);
+        PointAlarmRecord? previous = null;
+        PointAlarmRecord? current = null;
+        lock (_gate)
+        {
+            _suppressed.Add(key);
+            if (_activeByPoint.TryGetValue(key, out var existing) ||
+                (existing = FindByNameLocked(key)) is not null)
+            {
+                previous = existing;
+                current = Clone(
+                    existing,
+                    PointAlarmStatus.Shelved,
+                    existing.Value,
+                    existing.AcknowledgedAt,
+                    existing.ClearedAt,
+                    existing.AcknowledgedBy,
+                    existing.Assignee,
+                    existing.ShelvedUntil,
+                    suppressed: true);
+                _activeByPoint[existing.QualifiedName] = current;
+            }
+        }
+
+        if (previous is not null && current is not null)
+        {
+            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        }
+    }
+
+    /// <inheritdoc />
+    public void Unsuppress(string pointName)
+    {
+        var key = ResolvePointKey(pointName);
+        lock (_gate)
+        {
+            _suppressed.Remove(key);
+            if (_activeByPoint.TryGetValue(key, out var existing) ||
+                (existing = FindByNameLocked(key)) is not null)
+            {
+                var restored = Clone(
+                    existing,
+                    existing.AcknowledgedAt is null ? PointAlarmStatus.Active : PointAlarmStatus.Acknowledged,
+                    existing.Value,
+                    existing.AcknowledgedAt,
+                    existing.ClearedAt,
+                    existing.AcknowledgedBy,
+                    existing.Assignee,
+                    null,
+                    suppressed: false);
+                _activeByPoint[existing.QualifiedName] = restored;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsSuppressed(string pointName)
+    {
+        var key = pointName?.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            return _suppressed.Contains(key)
+                || _suppressed.Contains(ResolvePointKey(key));
+        }
     }
 
     /// <summary>
@@ -160,6 +318,11 @@ public sealed class PointAlarmTable : IPointAlarmTable
                 .ToArray())
             {
                 changes.Add((existing, ClearLocked(existing, existing.Value, DateTimeOffset.Now)));
+            }
+
+            foreach (var name in _suppressed.Where(item => item.StartsWith(key + ".", StringComparison.OrdinalIgnoreCase)).ToArray())
+            {
+                _suppressed.Remove(name);
             }
         }
 
@@ -190,25 +353,34 @@ public sealed class PointAlarmTable : IPointAlarmTable
         PointAlarmRecord current;
         lock (_gate)
         {
+            ExpireShelvesLocked(DateTimeOffset.Now);
+            var limits = snapshot.Definition.AlarmLimits;
+            var suppressed = _suppressed.Contains(snapshot.QualifiedName) || _suppressed.Contains(snapshot.Definition.Name);
             if (_activeByPoint.TryGetValue(snapshot.QualifiedName, out var existing))
             {
                 previous = existing;
-                current = new PointAlarmRecord(
-                    existing.Id,
-                    existing.QualifiedName,
-                    existing.PointName,
-                    existing.DeviceName,
-                    snapshot.AlarmState,
+                current = Clone(
+                    existing,
                     existing.Status,
                     snapshot.Value,
-                    existing.RaisedAt,
                     existing.AcknowledgedAt,
                     existing.ClearedAt,
-                    existing.AcknowledgedBy);
+                    existing.AcknowledgedBy,
+                    existing.Assignee,
+                    existing.ShelvedUntil,
+                    suppressed,
+                    snapshot.AlarmState,
+                    limits?.Severity ?? existing.Severity,
+                    limits?.Area ?? existing.Area);
                 _activeByPoint[snapshot.QualifiedName] = current;
             }
             else
             {
+                if (suppressed)
+                {
+                    return;
+                }
+
                 previous = null;
                 current = new PointAlarmRecord(
                     Guid.NewGuid(),
@@ -221,7 +393,10 @@ public sealed class PointAlarmTable : IPointAlarmTable
                     snapshot.UpdatedAt ?? DateTimeOffset.Now,
                     null,
                     null,
-                    null);
+                    null,
+                    limits?.Severity ?? PointAlarmSeverity.Warning,
+                    limits?.Area,
+                    limits?.DefaultAssignee);
                 _activeByPoint[snapshot.QualifiedName] = current;
                 _idToPoint[current.Id] = snapshot.QualifiedName;
             }
@@ -230,6 +405,8 @@ public sealed class PointAlarmTable : IPointAlarmTable
         if (previous is null
             || previous.AlarmState != current.AlarmState
             || previous.Status != current.Status
+            || previous.Severity != current.Severity
+            || previous.Assignee != current.Assignee
             || !Equals(previous.Value, current.Value))
         {
             Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
@@ -261,36 +438,32 @@ public sealed class PointAlarmTable : IPointAlarmTable
             return existing;
         }
 
-        var current = new PointAlarmRecord(
-            existing.Id,
-            existing.QualifiedName,
-            existing.PointName,
-            existing.DeviceName,
-            existing.AlarmState,
+        var current = Clone(
+            existing,
             PointAlarmStatus.Acknowledged,
             existing.Value,
-            existing.RaisedAt,
             DateTimeOffset.Now,
             existing.ClearedAt,
-            string.IsNullOrWhiteSpace(acknowledgedBy) ? null : acknowledgedBy.Trim());
+            string.IsNullOrWhiteSpace(acknowledgedBy) ? null : acknowledgedBy.Trim(),
+            existing.Assignee,
+            existing.ShelvedUntil,
+            existing.Suppressed);
         _activeByPoint[existing.QualifiedName] = current;
         return current;
     }
 
     private PointAlarmRecord ClearLocked(PointAlarmRecord existing, object? value, DateTimeOffset clearedAt)
     {
-        var current = new PointAlarmRecord(
-            existing.Id,
-            existing.QualifiedName,
-            existing.PointName,
-            existing.DeviceName,
-            existing.AlarmState,
+        var current = Clone(
+            existing,
             PointAlarmStatus.Cleared,
             value,
-            existing.RaisedAt,
             existing.AcknowledgedAt,
             clearedAt,
-            existing.AcknowledgedBy);
+            existing.AcknowledgedBy,
+            existing.Assignee,
+            null,
+            existing.Suppressed);
         _activeByPoint.Remove(existing.QualifiedName);
         _idToPoint.Remove(existing.Id);
         _history.Add(current);
@@ -301,4 +474,100 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         return current;
     }
+
+    private void ExpireShelvesLocked(DateTimeOffset now)
+    {
+        foreach (var existing in _activeByPoint.Values.Where(item =>
+                     item.Status == PointAlarmStatus.Shelved
+                     && item.ShelvedUntil is { } until
+                     && until <= now
+                     && !item.Suppressed).ToArray())
+        {
+            var restored = Clone(
+                existing,
+                existing.AcknowledgedAt is null ? PointAlarmStatus.Active : PointAlarmStatus.Acknowledged,
+                existing.Value,
+                existing.AcknowledgedAt,
+                existing.ClearedAt,
+                existing.AcknowledgedBy,
+                existing.Assignee,
+                null,
+                existing.Suppressed);
+            _activeByPoint[existing.QualifiedName] = restored;
+        }
+    }
+
+    private PointAlarmRecord RequireOpen(Guid id)
+    {
+        var existing = RequireStored(id);
+        if (!existing.IsOpen && existing.Status != PointAlarmStatus.Shelved)
+        {
+            throw new ZeusException($"找不到标识为 {id} 的活动报警。请确认该报警尚未复归。");
+        }
+
+        return existing;
+    }
+
+    private PointAlarmRecord RequireStored(Guid id)
+    {
+        if (!_idToPoint.TryGetValue(id, out var qualified)
+            || !_activeByPoint.TryGetValue(qualified, out var existing))
+        {
+            throw new ZeusException($"找不到标识为 {id} 的活动报警。请确认该报警尚未复归。");
+        }
+
+        return existing;
+    }
+
+    private PointAlarmRecord? FindByNameLocked(string key)
+        => _activeByPoint.Values.FirstOrDefault(item =>
+            item.QualifiedName.Equals(key, StringComparison.OrdinalIgnoreCase)
+            || item.PointName.Equals(key, StringComparison.OrdinalIgnoreCase));
+
+    private string ResolvePointKey(string pointName)
+    {
+        if (string.IsNullOrWhiteSpace(pointName))
+        {
+            throw new ZeusException("点名不能为空。");
+        }
+
+        var key = pointName.Trim();
+        if (_points.TryGet(key, out var snapshot) && snapshot is not null)
+        {
+            return snapshot.QualifiedName;
+        }
+
+        return key;
+    }
+
+    private static PointAlarmRecord Clone(
+        PointAlarmRecord existing,
+        PointAlarmStatus status,
+        object? value,
+        DateTimeOffset? acknowledgedAt,
+        DateTimeOffset? clearedAt,
+        string? acknowledgedBy,
+        string? assignee,
+        DateTimeOffset? shelvedUntil,
+        bool suppressed,
+        PointAlarmState? alarmState = null,
+        PointAlarmSeverity? severity = null,
+        string? area = null)
+        => new(
+            existing.Id,
+            existing.QualifiedName,
+            existing.PointName,
+            existing.DeviceName,
+            alarmState ?? existing.AlarmState,
+            status,
+            value,
+            existing.RaisedAt,
+            acknowledgedAt,
+            clearedAt,
+            acknowledgedBy,
+            severity ?? existing.Severity,
+            area ?? existing.Area,
+            assignee,
+            shelvedUntil,
+            suppressed);
 }

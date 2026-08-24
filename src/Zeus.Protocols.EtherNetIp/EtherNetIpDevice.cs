@@ -14,7 +14,7 @@ public sealed class EtherNetIpDevice : DeviceBase, IAcquisitionSource, IPointWri
     private readonly IReadOnlyList<EtherNetIpPointSpec> _specs;
     private readonly IReadOnlyList<PointDefinition> _points;
 
-    /// <summary>创建设备。通常由 <c>AddAllenBradleyEtherNetIp</c> 构造。</summary>
+    /// <summary>创建设备。通常由 <c>AddEtherNetIp</c> 构造。</summary>
     public EtherNetIpDevice(
         string name,
         IChannel channel,

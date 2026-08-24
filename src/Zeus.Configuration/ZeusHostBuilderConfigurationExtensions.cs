@@ -106,10 +106,6 @@ public static class ZeusHostBuilderConfigurationExtensions
     {
         ApplyAcquisition(builder.Acquisition, document.Acquisition);
         ApplyReconnect(builder.Reconnect, document.Reconnect);
-        if (!string.IsNullOrWhiteSpace(document.PointHistoryFile))
-        {
-            builder.AddPointHistoryFile(document.PointHistoryFile);
-        }
 
         foreach (var channel in document.Channels)
         {

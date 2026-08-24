@@ -63,14 +63,6 @@ namespace Zeus
         public bool TryGet<TDevice>(string name, out TDevice? device)
             where TDevice :  class, Zeus.IDevice { }
     }
-    public sealed class FilePointHistoryStore : System.IAsyncDisposable, Zeus.IPointHistoryStore
-    {
-        public FilePointHistoryStore(string path) { }
-        public FilePointHistoryStore(Zeus.FilePointHistoryStoreOptions options) { }
-        public string FilePath { get; }
-        public System.Threading.Tasks.ValueTask AppendAsync(Zeus.PointSnapshot snapshot, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.ValueTask DisposeAsync() { }
-    }
     public sealed class PointAlarmTable : Zeus.IPointAlarmTable
     {
         public PointAlarmTable(Zeus.IPointTable points, int historyCapacity = 256) { }
@@ -80,24 +72,26 @@ namespace Zeus
         public Zeus.PointAlarmRecord Acknowledge(System.Guid id, string? acknowledgedBy = null) { }
         public System.Collections.Generic.IReadOnlyList<Zeus.PointAlarmRecord> AcknowledgeAll(string? acknowledgedBy = null) { }
         public Zeus.PointAlarmRecord? AcknowledgePoint(string pointName, string? acknowledgedBy = null) { }
+        public Zeus.PointAlarmRecord Assign(System.Guid id, string? assignee) { }
         public void ClearDevice(string deviceName) { }
+        public bool IsSuppressed(string pointName) { }
+        public Zeus.PointAlarmRecord Shelve(System.Guid id, System.DateTimeOffset until) { }
+        public void Suppress(string pointName) { }
+        public Zeus.PointAlarmRecord Unshelve(System.Guid id) { }
+        public void Unsuppress(string pointName) { }
     }
     public sealed class PointTable : Zeus.IPointTable, Zeus.IPointTableWriter
     {
-        public PointTable(int historyCapacity = 128) { }
-        public PointTable(Zeus.IDeviceRegistry? devices, int historyCapacity = 128) { }
-        public PointTable(Zeus.IDeviceRegistry? devices, int historyCapacity, int maxHistoryPoints) { }
-        public PointTable(Zeus.IDeviceRegistry? devices, int historyCapacity, int maxHistoryPoints, Zeus.IPointHistoryStore? store) { }
-        public PointTable(Zeus.IDeviceRegistry? devices, int historyCapacity, int maxHistoryPoints, Zeus.IPointHistoryStore? store, Microsoft.Extensions.Logging.ILogger? logger) { }
+        public PointTable() { }
+        public PointTable(Zeus.IDeviceRegistry? devices) { }
+        public PointTable(Zeus.IDeviceRegistry? devices, Microsoft.Extensions.Logging.ILogger? logger) { }
         public System.Collections.Generic.IReadOnlyList<Zeus.PointSnapshot> All { get; }
-        public int HistoryCapacity { get; }
         public event System.EventHandler<Zeus.PointBatchChangedEventArgs>? BatchChanged;
         public event System.EventHandler<Zeus.PointChangedEventArgs>? Changed;
         public void BeginBatch() { }
         public void EndBatch() { }
         public Zeus.PointSnapshot Get(string name) { }
         public T Get<T>(string name) { }
-        public System.Collections.Generic.IReadOnlyList<Zeus.PointSnapshot> GetHistory(string name) { }
         public void Publish(string qualifiedName, object? value) { }
         public void PublishError(string qualifiedName, string error) { }
         public void Register(Zeus.PointDefinition definition) { }
