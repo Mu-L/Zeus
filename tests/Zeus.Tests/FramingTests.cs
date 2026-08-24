@@ -107,12 +107,12 @@ public sealed class FramingTests
     {
         private readonly LengthHeaderFrameCodec _codec = new();
 
-        public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
+        public Task<ReadOnlyMemory<byte>?> RespondAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default)
         {
             _codec.Append(request.Span);
             if (!_codec.TryDecode(out var payload) || payload.Length < 2)
             {
-                return null;
+                return Task.FromResult<ReadOnlyMemory<byte>?>(null);
             }
 
             var command = (byte)(payload[0] | 0x80);
@@ -120,7 +120,7 @@ public sealed class FramingTests
             var wrongSequence = (byte)(sequence + 1);
             var wrongReply = _codec.Encode([command, wrongSequence, 0x00]);
             var expectedReply = _codec.Encode([command, sequence, 0x01]);
-            return wrongReply.Concat(expectedReply).ToArray();
+            return Task.FromResult<ReadOnlyMemory<byte>?>(wrongReply.Concat(expectedReply).ToArray());
         }
     }
 }

@@ -1,19 +1,7 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
 /// <summary>
-/// 程序集加载时登记 Siemens S7 的 JSON 绑定。
-/// </summary>
-internal static class S7JsonBinderRegistration
-{
-    /// <summary>模块初始化：登记 <see cref="S7JsonBinder"/>。</summary>
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new S7JsonBinder());
-}
-
-/// <summary>
-/// Siemens S7 的 JSON 设备与虚拟从站绑定。
+/// Siemens S7 的 JSON 设备与虚拟从站绑定。由配置核心探测本程序集后登记。
 /// </summary>
 public sealed class S7JsonBinder : IZeusJsonBinder
 {
@@ -57,19 +45,17 @@ public sealed class S7JsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
     {
         var timeout = device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
         Action<S7PointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
-        builder.AddSiemensS7(device.Name.Trim(), device.Channel.Trim(), CreateOptions(device), timeout, points);
-    }
+        if (builder is not null)
+        {
+            builder.AddSiemensS7(device.Name.Trim(), device.Channel.Trim(), CreateOptions(device), timeout, points);
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-    {
-        var timeout = device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
-        Action<S7PointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
-        host.AddSiemensS7(device.Name.Trim(), device.Channel.Trim(), CreateOptions(device), timeout, points);
+        host!.AddSiemensS7(device.Name.Trim(), device.Channel.Trim(), CreateOptions(device), timeout, points);
     }
 
     /// <inheritdoc />

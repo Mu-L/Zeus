@@ -1,19 +1,7 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
 /// <summary>
-/// 程序集加载时把 Modbus JSON 绑定登记到配置核心，这样 <c>Zeus.Configuration</c> 不必引用本包。
-/// </summary>
-internal static class ModbusJsonBinderRegistration
-{
-    /// <summary>模块初始化：登记 <see cref="ModbusJsonBinder"/>。</summary>
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new ModbusJsonBinder());
-}
-
-/// <summary>
-/// Modbus RTU/TCP/ASCII 的 JSON 设备与虚拟从站绑定。
+/// Modbus RTU/TCP/ASCII 的 JSON 设备与虚拟从站绑定。由配置核心探测本程序集后登记。
 /// </summary>
 public sealed class ModbusJsonBinder : IZeusJsonBinder
 {
@@ -45,37 +33,43 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
         => Add(device, (name, channel, unitId, timeout, points) =>
         {
             switch (CreateDeviceTransport(ZeusConfigurationText.Normalize(device.Type), device.Type))
             {
                 case ModbusTransport.Tcp:
-                    builder.AddModbusTcp(name, channel, unitId, timeout, points);
-                    break;
-                case ModbusTransport.Ascii:
-                    builder.AddModbusAscii(name, channel, unitId, timeout, points);
-                    break;
-                default:
-                    builder.AddModbusRtu(name, channel, unitId, timeout, points);
-                    break;
-            }
-        });
+                    if (builder is not null)
+                    {
+                        builder.AddModbusTcp(name, channel, unitId, timeout, points);
+                    }
+                    else
+                    {
+                        host!.AddModbusTcp(name, channel, unitId, timeout, points);
+                    }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => Add(device, (name, channel, unitId, timeout, points) =>
-        {
-            switch (CreateDeviceTransport(ZeusConfigurationText.Normalize(device.Type), device.Type))
-            {
-                case ModbusTransport.Tcp:
-                    host.AddModbusTcp(name, channel, unitId, timeout, points);
                     break;
                 case ModbusTransport.Ascii:
-                    host.AddModbusAscii(name, channel, unitId, timeout, points);
+                    if (builder is not null)
+                    {
+                        builder.AddModbusAscii(name, channel, unitId, timeout, points);
+                    }
+                    else
+                    {
+                        host!.AddModbusAscii(name, channel, unitId, timeout, points);
+                    }
+
                     break;
                 default:
-                    host.AddModbusRtu(name, channel, unitId, timeout, points);
+                    if (builder is not null)
+                    {
+                        builder.AddModbusRtu(name, channel, unitId, timeout, points);
+                    }
+                    else
+                    {
+                        host!.AddModbusRtu(name, channel, unitId, timeout, points);
+                    }
+
                     break;
             }
         });

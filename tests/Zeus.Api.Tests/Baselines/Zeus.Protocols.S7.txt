@@ -72,8 +72,7 @@ namespace Zeus
         public S7JsonBinder() { }
         public System.Collections.Generic.IReadOnlyList<string> DeviceTypes { get; }
         public System.Collections.Generic.IReadOnlyList<string> ResponderTypes { get; }
-        public void ApplyDevice(Zeus.IZeusHost host, Zeus.DeviceConfiguration device) { }
-        public void ApplyDevice(Zeus.ZeusHostBuilder builder, Zeus.DeviceConfiguration device) { }
+        public void ApplyDevice(Zeus.DeviceConfiguration device, Zeus.ZeusHostBuilder? builder = null, Zeus.IZeusHost? host = null) { }
         public Zeus.IVirtualResponder? CreateResponder(Zeus.ChannelConfiguration channel) { }
         public string DeviceFingerprint(Zeus.DeviceConfiguration device) { }
         public void ValidateDevice(Zeus.DeviceConfiguration device, string path) { }
@@ -160,7 +159,7 @@ namespace Zeus
     {
         public S7SlaveResponder(Zeus.S7SlaveMemory? memory = null, Zeus.S7Options? options = null) { }
         public Zeus.S7SlaveMemory Memory { get; }
-        public System.ReadOnlyMemory<byte>? Respond(System.ReadOnlyMemory<byte> request) { }
+        public System.Threading.Tasks.Task<System.ReadOnlyMemory<byte>?> RespondAsync(System.ReadOnlyMemory<byte> request, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public static class ZeusHostBuilderS7Extensions
     {

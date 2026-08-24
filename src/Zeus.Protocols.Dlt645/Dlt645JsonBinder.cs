@@ -1,15 +1,6 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
-/// <summary>程序集加载时登记 DL/T 645 的 JSON 绑定。</summary>
-internal static class Dlt645JsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new Dlt645JsonBinder());
-}
-
-/// <summary>DL/T 645 的 JSON 设备与虚拟表计绑定。</summary>
+/// <summary>DL/T 645 的 JSON 设备与虚拟表计绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class Dlt645JsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
@@ -33,12 +24,16 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddDlt645(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddDlt645(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddDlt645(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+        host!.AddDlt645(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)

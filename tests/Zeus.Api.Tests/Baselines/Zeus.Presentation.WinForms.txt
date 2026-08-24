@@ -19,8 +19,8 @@ namespace Zeus
     }
     public static class WinFormsHostExtensions
     {
-        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Forms.Form form, System.Action<Zeus.ZeusHostBuilder>? configure, Zeus.UiHostAttachMode mode = 1) { }
-        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Forms.Form form, Zeus.IZeusHost host, Zeus.UiHostAttachMode mode = 1) { }
+        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Forms.Form form, System.Action<Zeus.ZeusHostBuilder>? configure) { }
+        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Forms.Form form, Zeus.IZeusHost host) { }
     }
     public sealed class WinFormsUiDispatcher : Zeus.IUiDispatcher
     {

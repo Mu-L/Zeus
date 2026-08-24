@@ -3,7 +3,7 @@ using System.Reflection;
 namespace Zeus;
 
 /// <summary>
-/// JSON 协议绑定目录。协议程序集通过模块初始化器登记；装载配置前会探测输出目录中的官方协议包。
+/// JSON 协议绑定目录。装载配置前探测输出目录中的官方协议包并登记绑定。
 /// </summary>
 public static class ZeusJsonBinders
 {
@@ -24,6 +24,38 @@ public static class ZeusJsonBinders
         "Zeus.Protocols.Snmp"
     ];
 
+    private static readonly Dictionary<string, string> DevicePackageHints = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["modbus-rtu"] = "Zeus.Protocols.Modbus",
+        ["modbus-tcp"] = "Zeus.Protocols.Modbus",
+        ["modbus-ascii"] = "Zeus.Protocols.Modbus",
+        ["mitsubishi-mc"] = "Zeus.Protocols.Mc",
+        ["siemens-s7"] = "Zeus.Protocols.S7",
+        ["omron-fins"] = "Zeus.Protocols.Fins",
+        ["omron-host-link"] = "Zeus.Protocols.HostLink",
+        ["panasonic-mewtocol"] = "Zeus.Protocols.Mewtocol",
+        ["ethernet-ip"] = "Zeus.Protocols.EtherNetIp",
+        ["dlt645"] = "Zeus.Protocols.Dlt645",
+        ["iec104"] = "Zeus.Protocols.Iec104",
+        ["mqtt"] = "Zeus.Protocols.Mqtt",
+        ["snmp"] = "Zeus.Protocols.Snmp"
+    };
+
+    private static readonly Dictionary<string, string> ResponderPackageHints = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["modbus"] = "Zeus.Protocols.Modbus",
+        ["mc"] = "Zeus.Protocols.Mc",
+        ["s7"] = "Zeus.Protocols.S7",
+        ["fins"] = "Zeus.Protocols.Fins",
+        ["host-link"] = "Zeus.Protocols.HostLink",
+        ["mewtocol"] = "Zeus.Protocols.Mewtocol",
+        ["ethernet-ip"] = "Zeus.Protocols.EtherNetIp",
+        ["dlt645"] = "Zeus.Protocols.Dlt645",
+        ["iec104"] = "Zeus.Protocols.Iec104",
+        ["mqtt"] = "Zeus.Protocols.Mqtt",
+        ["snmp"] = "Zeus.Protocols.Snmp"
+    };
+
     /// <summary>
     /// 登记一个协议绑定。重复登记同一实例会被忽略。
     /// </summary>
@@ -43,7 +75,8 @@ public static class ZeusJsonBinders
     }
 
     /// <summary>
-    /// 探测已加载及输出目录中的官方协议程序集，触发其模块初始化器。
+    /// 探测已加载及输出目录中的官方协议程序集，并登记其中的 JSON 绑定。
+    /// 只引用配置包、尚未碰到协议类型时必须先探测，否则 JSON 设备类型无法解析。
     /// </summary>
     public static void Probe()
     {
@@ -94,6 +127,16 @@ public static class ZeusJsonBinders
                 binder.ResponderTypes.Any(type => string.Equals(type, normalizedResponder, StringComparison.OrdinalIgnoreCase)));
         }
     }
+
+    internal static string MissingDevicePackageMessage(string normalizedType)
+        => DevicePackageHints.TryGetValue(normalizedType, out var package)
+            ? $"请安装协议包：dotnet add package {package}"
+            : "请引用对应协议包";
+
+    internal static string MissingResponderPackageMessage(string normalizedResponder)
+        => ResponderPackageHints.TryGetValue(normalizedResponder, out var package)
+            ? $"请安装协议包：dotnet add package {package}"
+            : "请引用对应协议包";
 
     /// <summary>当前已登记绑定的快照。</summary>
     public static IReadOnlyList<IZeusJsonBinder> All

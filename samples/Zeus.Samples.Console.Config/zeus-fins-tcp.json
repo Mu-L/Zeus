@@ -15,7 +15,8 @@
     {
       "name": "plc",
       "channel": "fins-link",
-      "type": "omron-fins-tcp",
+      "type": "omron-fins",
+      "transport": "tcp",
       "tcpRequestedClientNode": 10,
       "useTcpNodeAddressHandshake": true,
       "wordOrder": "high-word-first",

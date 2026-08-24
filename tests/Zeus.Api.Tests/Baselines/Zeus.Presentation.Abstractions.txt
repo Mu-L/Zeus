@@ -100,11 +100,6 @@ namespace Zeus
         public void Post(System.Action action) { }
         public static Zeus.SynchronizationContextUiDispatcher Capture() { }
     }
-    public enum UiHostAttachMode
-    {
-        Manual = 0,
-        WindowLifetime = 1,
-    }
     public sealed class UiHostAttachment : System.IAsyncDisposable
     {
         public UiHostAttachment(Zeus.IZeusHost host) { }

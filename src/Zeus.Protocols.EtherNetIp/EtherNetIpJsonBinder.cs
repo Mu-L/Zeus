@@ -1,15 +1,6 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
-/// <summary>程序集加载时登记 EtherNet/IP 的 JSON 绑定。</summary>
-internal static class EtherNetIpJsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new EtherNetIpJsonBinder());
-}
-
-/// <summary>Allen-Bradley EtherNet/IP 的 JSON 设备与虚拟从站绑定。</summary>
+/// <summary>Allen-Bradley EtherNet/IP 的 JSON 设备与虚拟从站绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class EtherNetIpJsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
@@ -33,12 +24,16 @@ public sealed class EtherNetIpJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddEtherNetIp(device.Name.Trim(), device.Channel.Trim(), null, Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddEtherNetIp(device.Name.Trim(), device.Channel.Trim(), null, Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddEtherNetIp(device.Name.Trim(), device.Channel.Trim(), null, Timeout(device), Points(device));
+        host!.AddEtherNetIp(device.Name.Trim(), device.Channel.Trim(), null, Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)

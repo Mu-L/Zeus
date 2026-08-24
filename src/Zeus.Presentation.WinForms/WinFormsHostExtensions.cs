@@ -12,19 +12,11 @@ public static class WinFormsHostExtensions
     /// </summary>
     /// <param name="form">主窗体或承载宿主的容器窗体。</param>
     /// <param name="host">尚未启动的宿主。</param>
-    /// <param name="mode">窗口寿命或手动启停。默认跟窗体 Load / FormClosed。</param>
     /// <returns>宿主附件，<see cref="UiHostAttachment.Host"/> 即原宿主。</returns>
-    public static UiHostAttachment AttachZeus(
-        this Form form,
-        IZeusHost host,
-        UiHostAttachMode mode = UiHostAttachMode.WindowLifetime)
+    public static UiHostAttachment AttachZeus(this Form form, IZeusHost host)
     {
         ArgumentNullException.ThrowIfNull(form);
         var attachment = new UiHostAttachment(host);
-        if (mode == UiHostAttachMode.Manual)
-        {
-            return attachment;
-        }
 
         async void OnLoad(object? sender, EventArgs e)
         {
@@ -69,10 +61,6 @@ public static class WinFormsHostExtensions
     /// </summary>
     /// <param name="form">主窗体。</param>
     /// <param name="configure">通道与设备注册。</param>
-    /// <param name="mode">窗口寿命或手动启停。</param>
-    public static UiHostAttachment AttachZeus(
-        this Form form,
-        Action<ZeusHostBuilder>? configure,
-        UiHostAttachMode mode = UiHostAttachMode.WindowLifetime)
-        => form.AttachZeus(ZeusHost.Create(configure), mode);
+    public static UiHostAttachment AttachZeus(this Form form, Action<ZeusHostBuilder>? configure)
+        => form.AttachZeus(ZeusHost.Create(configure));
 }

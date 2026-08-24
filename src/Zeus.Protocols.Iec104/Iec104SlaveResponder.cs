@@ -36,7 +36,11 @@ public sealed class Iec104SlaveResponder : IVirtualResponder
     public bool ConfirmTestFrames { get; set; } = true;
 
     /// <inheritdoc />
-    public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
+    public Task<ReadOnlyMemory<byte>?> RespondAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default)
+        => Task.FromResult(Respond(request));
+
+    /// <summary>同步处理一帧请求。虚拟站无 I/O，由 <see cref="RespondAsync"/> 转发。</summary>
+    private ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
     {
         if (!Iec104Codec.TryDecodeApdu(request.ToArray(), out var apdu, out _))
         {

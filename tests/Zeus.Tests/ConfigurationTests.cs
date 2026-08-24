@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
+using System.Text.Json;
 using Zeus;
 
 namespace Zeus.Tests;
@@ -161,6 +163,42 @@ public sealed class ConfigurationTests
             """;
         var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json));
         Assert.Contains("重复", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 缺少官方协议绑定时，提示里应给出可直接复制的安装命令。
+    /// </summary>
+    [Fact]
+    public void MissingProtocolBinderMessage_SuggestsInstallCommand()
+    {
+        Assert.Contains(
+            "dotnet add package Zeus.Protocols.Modbus",
+            InvokeMissingDevicePackageMessage("modbus-rtu"),
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "dotnet add package Zeus.Protocols.Modbus",
+            InvokeMissingResponderPackageMessage("modbus"),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Schema 应按通道类型声明必填字段，让编辑器在保存前就能标红。
+    /// </summary>
+    [Fact]
+    public void Schema_RequiresTypeSpecificChannelFields()
+    {
+        var schemaPath = FindRepositoryFile("src", "Zeus.Configuration", "Schemas", "zeus.schema.json");
+        using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
+        var channelRules = schema.RootElement.GetProperty("$defs").GetProperty("channel").GetProperty("allOf");
+
+        AssertSchemaRequiresChannelField(channelRules, "serial", "portName");
+        AssertSchemaRequiresChannelField(channelRules, "tcp", "host");
+        AssertSchemaRequiresChannelField(channelRules, "tcp", "port");
+        AssertSchemaRequiresChannelField(channelRules, "udp", "host");
+        AssertSchemaRequiresChannelField(channelRules, "udp", "port");
+        AssertSchemaRequiresChannelField(channelRules, "tcp-server", "localPort");
+        AssertSchemaRequiresChannelField(channelRules, "udp-server", "localPort");
     }
 
     /// <summary>
@@ -475,10 +513,10 @@ public sealed class ConfigurationTests
     }
 
     /// <summary>
-    /// ReloadAcquisition 只更新间隔，不重建设备。
+    /// ReloadAsync 只改采集间隔时不重建设备。
     /// </summary>
     [Fact]
-    public async Task ReloadAcquisition_UpdatesIntervalOnly()
+    public async Task ReloadAsync_UpdatesIntervalWithoutRecreatingDevices()
     {
         var path = Path.Combine(Path.GetTempPath(), $"zeus-config-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, ValidJson);
@@ -490,7 +528,7 @@ public sealed class ConfigurationTests
 
             var updated = ValidJson.Replace("\"intervalMilliseconds\": 200", "\"intervalMilliseconds\": 800", StringComparison.Ordinal);
             await File.WriteAllTextAsync(path, updated);
-            host.ReloadAcquisition(path);
+            await host.ReloadAsync(path);
 
             Assert.Equal(TimeSpan.FromMilliseconds(800), host.Services.GetRequiredService<AcquisitionOptions>().Interval);
             Assert.Same(oven, host.Devices.Get<ModbusDevice>("oven"));
@@ -577,5 +615,77 @@ public sealed class ConfigurationTests
         }
 
         throw new TimeoutException($"等待点 {name} 超时。");
+    }
+
+    private static string InvokeMissingDevicePackageMessage(string normalizedType)
+    {
+        var method = typeof(ZeusJsonBinders).GetMethod("MissingDevicePackageMessage", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(nameof(ZeusJsonBinders), "MissingDevicePackageMessage");
+
+        return Assert.IsType<string>(method.Invoke(null, [normalizedType]));
+    }
+
+    private static string InvokeMissingResponderPackageMessage(string normalizedResponder)
+    {
+        var method = typeof(ZeusJsonBinders).GetMethod("MissingResponderPackageMessage", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(nameof(ZeusJsonBinders), "MissingResponderPackageMessage");
+
+        return Assert.IsType<string>(method.Invoke(null, [normalizedResponder]));
+    }
+
+    private static void AssertSchemaRequiresChannelField(JsonElement channelRules, string channelType, string fieldName)
+    {
+        var found = false;
+        foreach (var rule in channelRules.EnumerateArray())
+        {
+            if (!rule.TryGetProperty("if", out var condition)
+                || !condition.TryGetProperty("properties", out var properties)
+                || !properties.TryGetProperty("type", out var type)
+                || !type.TryGetProperty("const", out var typeName)
+                || !string.Equals(typeName.GetString(), channelType, StringComparison.Ordinal)
+                || !condition.TryGetProperty("required", out var conditionRequired)
+                || !RequiredArrayContains(conditionRequired, "type")
+                || !rule.TryGetProperty("then", out var consequence)
+                || !consequence.TryGetProperty("required", out var consequenceRequired))
+            {
+                continue;
+            }
+
+            found = RequiredArrayContains(consequenceRequired, fieldName);
+            if (found)
+            {
+                break;
+            }
+        }
+
+        Assert.True(found, $"schema channel type '{channelType}' should require '{fieldName}'.");
+    }
+
+    private static bool RequiredArrayContains(JsonElement required, string fieldName)
+    {
+        foreach (var item in required.EnumerateArray())
+        {
+            if (string.Equals(item.GetString(), fieldName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string FindRepositoryFile(params string[] relativeSegments)
+    {
+        var relativePath = Path.Combine(relativeSegments);
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new FileNotFoundException($"找不到仓库文件 {relativePath}。", relativePath);
     }
 }

@@ -19,7 +19,11 @@ public sealed class SnmpAgentResponder : IVirtualResponder
     public SnmpAgentMemory Memory => _memory;
 
     /// <inheritdoc />
-    public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
+    public Task<ReadOnlyMemory<byte>?> RespondAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default)
+        => Task.FromResult(Respond(request));
+
+    /// <summary>同步处理一帧请求。虚拟 Agent 无 I/O，由 <see cref="RespondAsync"/> 转发。</summary>
+    private ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
     {
         SnmpMessage message;
         try

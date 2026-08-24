@@ -2,8 +2,8 @@ namespace Zeus
 {
     public static class WpfHostExtensions
     {
-        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Window window, System.Action<Zeus.ZeusHostBuilder>? configure, Zeus.UiHostAttachMode mode = 1) { }
-        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Window window, Zeus.IZeusHost host, Zeus.UiHostAttachMode mode = 1) { }
+        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Window window, System.Action<Zeus.ZeusHostBuilder>? configure) { }
+        public static Zeus.UiHostAttachment AttachZeus(this System.Windows.Window window, Zeus.IZeusHost host) { }
     }
     public sealed class WpfUiDispatcher : Zeus.IUiDispatcher
     {

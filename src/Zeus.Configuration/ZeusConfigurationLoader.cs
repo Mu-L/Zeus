@@ -150,10 +150,10 @@ public static class ZeusConfigurationLoader
 
                     break;
                 case "tcp-server":
-                    ValidateTcpServerChannel(channel, path);
+                    ValidateServerChannel(channel, path, "tcp-server");
                     break;
                 case "udp-server":
-                    ValidateUdpServerChannel(channel, path);
+                    ValidateServerChannel(channel, path, "udp-server");
                     break;
                 default:
                     throw new ZeusException(
@@ -188,8 +188,9 @@ public static class ZeusConfigurationLoader
             if (binder is null)
             {
                 var known = string.Join("、", ZeusJsonBinders.All.SelectMany(item => item.DeviceTypes).Distinct());
+                var hint = ZeusJsonBinders.MissingDevicePackageMessage(type);
                 throw new ZeusException(
-                    $"{path}.type「{device.Type}」没有对应的 JSON 绑定。请引用对应协议包（当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}）。");
+                    $"{path}.type「{device.Type}」没有对应的 JSON 绑定。{hint}（当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}）。");
             }
 
             binder.ValidateDevice(device, path);
@@ -208,8 +209,9 @@ public static class ZeusConfigurationLoader
         if (binder is null)
         {
             var known = string.Join("、", ZeusJsonBinders.All.SelectMany(item => item.ResponderTypes).Distinct());
+            var hint = ZeusJsonBinders.MissingResponderPackageMessage(responder);
             throw new ZeusException(
-                $"{path}.responder「{channel.Responder}」没有对应的 JSON 绑定。请引用对应协议包，或省略 responder 以回显写入。当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}。");
+                $"{path}.responder「{channel.Responder}」没有对应的 JSON 绑定。{hint}，或省略 responder 以回显写入。当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}。");
         }
 
         binder.ValidateResponder(channel, path);
@@ -228,7 +230,7 @@ public static class ZeusConfigurationLoader
         }
     }
 
-    private static void ValidateUdpServerChannel(ChannelConfiguration channel, string path)
+    private static void ValidateServerChannel(ChannelConfiguration channel, string path, string type)
     {
         if (!string.IsNullOrWhiteSpace(channel.LocalAddress)
             && !IPAddress.TryParse(channel.LocalAddress.Trim(), out _))
@@ -238,31 +240,7 @@ public static class ZeusConfigurationLoader
 
         if (channel.LocalPort is < 0 or > 65535)
         {
-            throw new ZeusException($"{path}.localPort 必须介于 0 与 65535 之间，0 表示自动分配。");
-        }
-
-        if (channel.Port is < 0 or > 65535)
-        {
-            throw new ZeusException($"{path}.port 必须介于 0 与 65535 之间；udp-server 未提供 localPort 时会把 port 当作监听端口。");
-        }
-    }
-
-    private static void ValidateTcpServerChannel(ChannelConfiguration channel, string path)
-    {
-        if (!string.IsNullOrWhiteSpace(channel.LocalAddress)
-            && !IPAddress.TryParse(channel.LocalAddress.Trim(), out _))
-        {
-            throw new ZeusException($"{path}.localAddress 必须是有效 IP 地址，例如 0.0.0.0 或 127.0.0.1。");
-        }
-
-        if (channel.LocalPort is < 0 or > 65535)
-        {
-            throw new ZeusException($"{path}.localPort 必须介于 0 与 65535 之间，0 表示自动分配。");
-        }
-
-        if (channel.Port is < 0 or > 65535)
-        {
-            throw new ZeusException($"{path}.port 必须介于 0 与 65535 之间；tcp-server 未提供 localPort 时会把 port 当作监听端口。");
+            throw new ZeusException($"{path}.localPort 必须介于 0 与 65535 之间，0 表示自动分配。{type} 只认 localPort，不能把 port 当作监听端口。");
         }
     }
 }

@@ -125,7 +125,8 @@ public sealed class FinsTests
                 {
                   "name": "plc",
                   "channel": "fins-link",
-                  "type": "omron-fins-udp",
+                  "type": "omron-fins",
+                  "transport": "udp",
                   "sourceNode": 10,
                   "destinationNode": 1,
                   "points": [

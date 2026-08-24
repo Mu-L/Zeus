@@ -1,15 +1,6 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
-/// <summary>程序集加载时登记 Omron Host Link 的 JSON 绑定。</summary>
-internal static class HostLinkJsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new HostLinkJsonBinder());
-}
-
-/// <summary>Omron Host Link 的 JSON 设备与虚拟从站绑定。</summary>
+/// <summary>Omron Host Link 的 JSON 设备与虚拟从站绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class HostLinkJsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
@@ -51,12 +42,16 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddOmronHostLink(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddOmronHostLink(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddOmronHostLink(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+        host!.AddOmronHostLink(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)

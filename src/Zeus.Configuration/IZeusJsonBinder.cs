@@ -26,14 +26,9 @@ public interface IZeusJsonBinder
     void ValidateResponder(ChannelConfiguration channel, string path);
 
     /// <summary>
-    /// 在构建器上登记设备。
+    /// 登记设备。构建期传入 <paramref name="builder"/>，热更新传入 <paramref name="host"/>，二者只填一个。
     /// </summary>
-    void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device);
-
-    /// <summary>
-    /// 在已构建的宿主上登记设备，供热更新使用。
-    /// </summary>
-    void ApplyDevice(IZeusHost host, DeviceConfiguration device);
+    void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null);
 
     /// <summary>
     /// 按通道配置创建虚拟从站。无法处理时返回 <c>null</c>。

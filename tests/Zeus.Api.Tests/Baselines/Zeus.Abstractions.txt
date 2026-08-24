@@ -180,7 +180,6 @@ namespace Zeus
     }
     public interface IVirtualResponder
     {
-        System.ReadOnlyMemory<byte>? Respond(System.ReadOnlyMemory<byte> request);
         System.Threading.Tasks.Task<System.ReadOnlyMemory<byte>?> RespondAsync(System.ReadOnlyMemory<byte> request, System.Threading.CancellationToken cancellationToken = default);
     }
     public interface IZeusHost : System.IAsyncDisposable

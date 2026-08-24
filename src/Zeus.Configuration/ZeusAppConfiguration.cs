@@ -86,7 +86,7 @@ public sealed class ChannelConfiguration
     /// <summary>TCP/UDP 对端主机。仅 tcp、udp 客户端。</summary>
     public string? Host { get; set; }
 
-    /// <summary>TCP/UDP 端口，默认 502。tcp/udp 为对端端口，tcp-server/udp-server 可作为监听端口。</summary>
+    /// <summary>TCP/UDP 对端端口，默认 502。仅 tcp、udp 客户端。</summary>
     public int Port { get; set; } = 502;
 
     /// <summary>TCP/UDP 本地监听地址。仅 tcp-server、udp-server。</summary>
@@ -96,7 +96,7 @@ public sealed class ChannelConfiguration
     public int LocalPort { get; set; }
 
     /// <summary>
-    /// 虚拟通道挂接的从站。支持 <c>modbus</c>、<c>mc</c>、<c>s7</c>、<c>fins</c>、<c>host-link</c>、<c>mewtocol</c>、<c>dlt645</c>、<c>iec104</c>、<c>mqtt</c>、<c>snmp</c>。
+    /// 虚拟通道挂接的从站。支持 <c>modbus</c>、<c>mc</c>、<c>s7</c>、<c>fins</c>、<c>host-link</c>、<c>mewtocol</c>、<c>ethernet-ip</c>、<c>dlt645</c>、<c>iec104</c>、<c>mqtt</c>、<c>snmp</c>。
     /// </summary>
     public string? Responder { get; set; }
 
@@ -130,8 +130,11 @@ public sealed class DeviceConfiguration
     /// <summary>绑定的通道名。</summary>
     public string Channel { get; set; } = string.Empty;
 
-    /// <summary>类型：<c>modbus-rtu</c>、<c>modbus-tcp</c>、<c>modbus-ascii</c>、<c>mitsubishi-mc</c>、<c>siemens-s7</c>、<c>omron-fins-udp</c>、<c>omron-fins-tcp</c>、<c>omron-host-link</c>、<c>panasonic-mewtocol</c>、<c>ethernet-ip</c>、<c>dlt645</c>、<c>iec104</c>、<c>mqtt</c> 或 <c>snmp</c>。</summary>
+    /// <summary>类型：<c>modbus-rtu</c>、<c>modbus-tcp</c>、<c>modbus-ascii</c>、<c>mitsubishi-mc</c>、<c>siemens-s7</c>、<c>omron-fins</c>、<c>omron-host-link</c>、<c>panasonic-mewtocol</c>、<c>ethernet-ip</c>、<c>dlt645</c>、<c>iec104</c>、<c>mqtt</c> 或 <c>snmp</c>。</summary>
     public string Type { get; set; } = "modbus-rtu";
+
+    /// <summary>FINS 线上封装：<c>udp</c> 或 <c>tcp</c>。省略为 udp。仅 omron-fins。</summary>
+    public string Transport { get; set; } = string.Empty;
 
     /// <summary>从站/单元标识，默认 1。Host Link 使用 0-31 单元号；MEWTOCOL 使用 1-99 站号。</summary>
     public byte UnitId { get; set; } = 1;

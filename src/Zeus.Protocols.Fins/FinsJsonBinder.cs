@@ -1,19 +1,10 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
-/// <summary>程序集加载时登记 Omron FINS 的 JSON 绑定。</summary>
-internal static class FinsJsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new FinsJsonBinder());
-}
-
-/// <summary>Omron FINS 的 JSON 设备与虚拟从站绑定。</summary>
+/// <summary>Omron FINS 的 JSON 设备与虚拟从站绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class FinsJsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
-    public IReadOnlyList<string> DeviceTypes { get; } = ["omron-fins-udp", "omron-fins-tcp"];
+    public IReadOnlyList<string> DeviceTypes { get; } = ["omron-fins"];
 
     /// <inheritdoc />
     public IReadOnlyList<string> ResponderTypes { get; } = ["fins"];
@@ -27,6 +18,7 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
         }
 
         ParseWordOrder(device.WordOrder, $"{path}.wordOrder");
+        ParseTransport(device.Transport, $"{path}.transport");
         ValidatePoints(device.Points, path);
     }
 
@@ -41,12 +33,16 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), Transport(device), Options(device), Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(device.Transport, "device.transport"), Options(device), Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), Transport(device), Options(device), Timeout(device), Points(device));
+        host!.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(device.Transport, "device.transport"), Options(device), Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
@@ -56,10 +52,15 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', ZeusConfigurationText.Normalize(device.Type), device.TimeoutMilliseconds, device.DestinationNode, device.SourceNode, ZeusConfigurationText.Normalize(device.WordOrder));
+        => string.Join('|', ZeusConfigurationText.Normalize(device.Transport), device.TimeoutMilliseconds, device.DestinationNode, device.SourceNode, ZeusConfigurationText.Normalize(device.WordOrder));
 
-    private static FinsTransport Transport(DeviceConfiguration device)
-        => ZeusConfigurationText.Normalize(device.Type) == "omron-fins-tcp" ? FinsTransport.Tcp : FinsTransport.Udp;
+    private static FinsTransport ParseTransport(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "udp" => FinsTransport.Udp,
+            "tcp" => FinsTransport.Tcp,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。FINS 设备可选 udp、tcp。")
+        };
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
         => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;

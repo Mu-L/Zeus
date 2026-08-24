@@ -17,7 +17,7 @@ namespace Zeus
         public Zeus.MqttBrokerMemory Memory { get; }
         public int PingRequestCount { get; }
         public Zeus.MqttMessage? WillMessage { get; }
-        public System.ReadOnlyMemory<byte>? Respond(System.ReadOnlyMemory<byte> request) { }
+        public System.Threading.Tasks.Task<System.ReadOnlyMemory<byte>?> RespondAsync(System.ReadOnlyMemory<byte> request, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public sealed class MqttClient : System.IAsyncDisposable
     {
@@ -69,8 +69,7 @@ namespace Zeus
         public MqttJsonBinder() { }
         public System.Collections.Generic.IReadOnlyList<string> DeviceTypes { get; }
         public System.Collections.Generic.IReadOnlyList<string> ResponderTypes { get; }
-        public void ApplyDevice(Zeus.IZeusHost host, Zeus.DeviceConfiguration device) { }
-        public void ApplyDevice(Zeus.ZeusHostBuilder builder, Zeus.DeviceConfiguration device) { }
+        public void ApplyDevice(Zeus.DeviceConfiguration device, Zeus.ZeusHostBuilder? builder = null, Zeus.IZeusHost? host = null) { }
         public Zeus.IVirtualResponder? CreateResponder(Zeus.ChannelConfiguration channel) { }
         public string DeviceFingerprint(Zeus.DeviceConfiguration device) { }
         public void ValidateDevice(Zeus.DeviceConfiguration device, string path) { }

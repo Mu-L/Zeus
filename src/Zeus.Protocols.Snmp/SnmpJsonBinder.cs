@@ -1,15 +1,6 @@
-using System.Runtime.CompilerServices;
-
 namespace Zeus;
 
-/// <summary>程序集加载时登记 SNMP 的 JSON 绑定。</summary>
-internal static class SnmpJsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new SnmpJsonBinder());
-}
-
-/// <summary>SNMP v2c 的 JSON 设备与虚拟 Agent 绑定。</summary>
+/// <summary>SNMP v2c 的 JSON 设备与虚拟 Agent 绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class SnmpJsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
@@ -48,12 +39,16 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddSnmp(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddSnmp(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddSnmp(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+        host!.AddSnmp(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)

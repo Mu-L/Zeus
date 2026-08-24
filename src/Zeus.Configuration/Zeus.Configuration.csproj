@@ -16,4 +16,8 @@
     <ProjectReference Include="..\Zeus.Hosting\Zeus.Hosting.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Schemas\zeus.schema.json" Pack="true" PackagePath="contentFiles\any\any\Schemas\" />
+  </ItemGroup>
+
 </Project>

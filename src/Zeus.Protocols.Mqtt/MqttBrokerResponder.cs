@@ -31,7 +31,11 @@ public sealed class MqttBrokerResponder : IVirtualResponder
     public int PingRequestCount { get; private set; }
 
     /// <inheritdoc />
-    public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
+    public Task<ReadOnlyMemory<byte>?> RespondAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default)
+        => Task.FromResult(Respond(request));
+
+    /// <summary>同步处理一帧请求。虚拟 Broker 无 I/O，由 <see cref="RespondAsync"/> 转发。</summary>
+    private ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
     {
         var buffer = request.ToArray().ToList();
         var output = new List<byte>();

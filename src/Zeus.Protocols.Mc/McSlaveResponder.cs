@@ -23,7 +23,11 @@ public sealed class McSlaveResponder : IVirtualResponder
     public McSlaveMemory Memory => _memory;
 
     /// <inheritdoc />
-    public ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
+    public Task<ReadOnlyMemory<byte>?> RespondAsync(ReadOnlyMemory<byte> request, CancellationToken cancellationToken = default)
+        => Task.FromResult(Respond(request));
+
+    /// <summary>同步处理一帧请求。虚拟 PLC 无 I/O，由 <see cref="RespondAsync"/> 转发。</summary>
+    private ReadOnlyMemory<byte>? Respond(ReadOnlyMemory<byte> request)
     {
         if (!McCodec.TryDecodeRequest(request.Span, out var context, out var command, out var subcommand, out var data))
         {

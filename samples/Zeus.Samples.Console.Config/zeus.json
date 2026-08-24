@@ -1,4 +1,5 @@
 {
+  "$schema": "https://docs.greekmythology.cn/schemas/zeus.json",
   "acquisition": {
     "intervalMilliseconds": 200,
     "pollImmediately": true

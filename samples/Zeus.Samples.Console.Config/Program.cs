@@ -4,7 +4,7 @@ using Zeus;
 // 保存后采集间隔、重连选项以及通道/设备拓扑都会热更新。
 await using var app = ZeusHost.Create(builder =>
 {
-    builder.AddJsonFile("zeus.json");
+    builder.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "zeus.json"));
 });
 
 var ready = new TaskCompletionSource<double>(TaskCreationOptions.RunContinuationsAsynchronously);

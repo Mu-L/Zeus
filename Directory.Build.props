@@ -19,7 +19,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>zeus;host;modbus;mitsubishi;mc;siemens;s7;omron;fins;host-link;panasonic;mewtocol;ethernet-ip;cip;allen-bradley;dlt645;iec104;iec-60870-5-104;mqtt;mqtt311;snmp;snmpv2c;message-queue;electric-meter;serial;tcp;udp;winforms;wpf;industrial;scada</PackageTags>
-    <PackageReleaseNotes>0.19.0：报警等级/区域/责任人/搁置/抑制；ViewModel 用 SynchronizationContext 与整表绑定源，不必再绑控件；AttachZeus 支持手动启停，不再只能跟窗口 Loaded/Closed。</PackageReleaseNotes>
+    <PackageReleaseNotes>0.19.0：报警等级/区域/责任人/搁置/抑制；ViewModel 用 SynchronizationContext 与整表绑定源，不必再绑控件；AttachZeus 跟窗口寿命绑定，不绑窗口用 AttachManually；去掉服务端 port 回退、FINS 双 type、ReloadAcquisition 与同步 Respond。</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/Mokode-dev/Zeus</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Mokode-dev/Zeus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

@@ -1,16 +1,8 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Zeus;
 
-/// <summary>程序集加载时登记 MQTT 的 JSON 绑定。</summary>
-internal static class MqttJsonBinderRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ZeusJsonBinders.Register(new MqttJsonBinder());
-}
-
-/// <summary>MQTT 的 JSON 设备与虚拟 Broker 绑定。</summary>
+/// <summary>MQTT 的 JSON 设备与虚拟 Broker 绑定。由配置核心探测本程序集后登记。</summary>
 public sealed class MqttJsonBinder : IZeusJsonBinder
 {
     /// <inheritdoc />
@@ -43,12 +35,16 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
     }
 
     /// <inheritdoc />
-    public void ApplyDevice(ZeusHostBuilder builder, DeviceConfiguration device)
-        => builder.AddMqtt(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+    {
+        if (builder is not null)
+        {
+            builder.AddMqtt(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+            return;
+        }
 
-    /// <inheritdoc />
-    public void ApplyDevice(IZeusHost host, DeviceConfiguration device)
-        => host.AddMqtt(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+        host!.AddMqtt(device.Name.Trim(), device.Channel.Trim(), Options(device), Timeout(device), Points(device));
+    }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)

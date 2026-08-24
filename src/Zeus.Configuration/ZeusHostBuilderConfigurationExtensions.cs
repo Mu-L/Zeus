@@ -47,20 +47,6 @@ public static class ZeusHostBuilderConfigurationExtensions
     }
 
     /// <summary>
-    /// 从文件重新读取采集间隔并立即生效。通道与设备不会重建。
-    /// 需要同步拓扑时请使用 <see cref="ReloadAsync"/>。
-    /// </summary>
-    /// <param name="host">已构建的宿主。</param>
-    /// <param name="path">JSON 路径。</param>
-    public static void ReloadAcquisition(this IZeusHost host, string path)
-    {
-        ArgumentNullException.ThrowIfNull(host);
-        var options = host.Services.GetRequiredService<AcquisitionOptions>();
-        var document = ZeusConfigurationLoader.LoadFile(path);
-        ApplyAcquisition(options, document.Acquisition);
-    }
-
-    /// <summary>
     /// 从文件重新装载配置：更新采集与重连选项，并按差异增删通道、设备。
     /// 监视器内部也走同一路径；测试或不想依赖 <c>FileSystemWatcher</c> 时可手动调用。
     /// </summary>
@@ -114,7 +100,7 @@ public static class ZeusHostBuilderConfigurationExtensions
 
         foreach (var device in document.Devices)
         {
-            RequireDeviceBinder(device).ApplyDevice(builder, device);
+            RequireDeviceBinder(device).ApplyDevice(device, builder: builder);
         }
 
         EnsureState(builder).Last = document;
@@ -207,7 +193,7 @@ public static class ZeusHostBuilderConfigurationExtensions
                 || replacedChannels.Contains(pair.Value.Channel.Trim());
             if (shouldAdd)
             {
-                RequireDeviceBinder(pair.Value).ApplyDevice(host, pair.Value);
+                RequireDeviceBinder(pair.Value).ApplyDevice(pair.Value, host: host);
             }
         }
     }
@@ -230,7 +216,7 @@ public static class ZeusHostBuilderConfigurationExtensions
                     options.LocalAddress = channel.LocalAddress;
                 }
 
-                options.LocalPort = EffectiveTcpServerPort(channel);
+                options.LocalPort = channel.LocalPort;
             }, cancellationToken)),
             "udp" => Await(host.AddUdpClientAsync(name, options =>
             {
@@ -245,7 +231,7 @@ public static class ZeusHostBuilderConfigurationExtensions
                     options.LocalAddress = channel.LocalAddress;
                 }
 
-                options.LocalPort = EffectiveUdpServerPort(channel);
+                options.LocalPort = channel.LocalPort;
             }, cancellationToken)),
             _ => Task.CompletedTask
         };
@@ -261,9 +247,9 @@ public static class ZeusHostBuilderConfigurationExtensions
             "virtual" => string.Join('|', type, ZeusConfigurationText.Normalize(channel.Responder), channel.UnitId, ZeusConfigurationText.Normalize(channel.Transport), channel.MeterAddress?.Trim(), channel.CommonAddress, channel.SnmpCommunity, channel.SnmpWriteCommunity),
             "serial" => string.Join('|', type, channel.PortName?.Trim(), channel.BaudRate),
             "tcp" => string.Join('|', type, channel.Host?.Trim(), channel.Port),
-            "tcp-server" => string.Join('|', "tcp-server", channel.LocalAddress?.Trim(), EffectiveTcpServerPort(channel)),
+            "tcp-server" => string.Join('|', "tcp-server", channel.LocalAddress?.Trim(), channel.LocalPort),
             "udp" => string.Join('|', type, channel.Host?.Trim(), channel.Port, channel.LocalPort),
-            "udp-server" => string.Join('|', "udp-server", channel.LocalAddress?.Trim(), EffectiveUdpServerPort(channel)),
+            "udp-server" => string.Join('|', "udp-server", channel.LocalAddress?.Trim(), channel.LocalPort),
             _ => type
         };
     }
@@ -311,7 +297,7 @@ public static class ZeusHostBuilderConfigurationExtensions
                         options.LocalAddress = channel.LocalAddress;
                     }
 
-                    options.LocalPort = EffectiveTcpServerPort(channel);
+                    options.LocalPort = channel.LocalPort;
                 });
                 break;
             case "udp":
@@ -330,17 +316,11 @@ public static class ZeusHostBuilderConfigurationExtensions
                         options.LocalAddress = channel.LocalAddress;
                     }
 
-                    options.LocalPort = EffectiveUdpServerPort(channel);
+                    options.LocalPort = channel.LocalPort;
                 });
                 break;
         }
     }
-
-    private static int EffectiveUdpServerPort(ChannelConfiguration channel)
-        => channel.LocalPort != 0 ? channel.LocalPort : channel.Port;
-
-    private static int EffectiveTcpServerPort(ChannelConfiguration channel)
-        => channel.LocalPort != 0 ? channel.LocalPort : channel.Port;
 
     private static IVirtualResponder? CreateResponder(ChannelConfiguration channel)
     {
@@ -354,8 +334,11 @@ public static class ZeusHostBuilderConfigurationExtensions
     }
 
     private static IZeusJsonBinder RequireDeviceBinder(DeviceConfiguration device)
-        => ZeusJsonBinders.FindDevice(ZeusConfigurationText.Normalize(device.Type))
-            ?? throw new ZeusException($"设备类型 {device.Type} 没有对应的 JSON 绑定。请引用对应协议包。");
+    {
+        var type = ZeusConfigurationText.Normalize(device.Type);
+        return ZeusJsonBinders.FindDevice(type)
+            ?? throw new ZeusException($"设备类型 {device.Type} 没有对应的 JSON 绑定。{ZeusJsonBinders.MissingDevicePackageMessage(type)}。");
+    }
 }
 
 /// <summary>

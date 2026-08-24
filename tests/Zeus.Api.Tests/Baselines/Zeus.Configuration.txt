@@ -82,6 +82,7 @@ namespace Zeus
         public int T3Milliseconds { get; set; }
         public int TcpRequestedClientNode { get; set; }
         public int? TimeoutMilliseconds { get; set; }
+        public string Transport { get; set; }
         public string Type { get; set; }
         public byte UnitId { get; set; }
         public bool UseTcpNodeAddressHandshake { get; set; }
@@ -92,8 +93,7 @@ namespace Zeus
     {
         System.Collections.Generic.IReadOnlyList<string> DeviceTypes { get; }
         System.Collections.Generic.IReadOnlyList<string> ResponderTypes { get; }
-        void ApplyDevice(Zeus.IZeusHost host, Zeus.DeviceConfiguration device);
-        void ApplyDevice(Zeus.ZeusHostBuilder builder, Zeus.DeviceConfiguration device);
+        void ApplyDevice(Zeus.DeviceConfiguration device, Zeus.ZeusHostBuilder? builder = null, Zeus.IZeusHost? host = null);
         Zeus.IVirtualResponder? CreateResponder(Zeus.ChannelConfiguration channel);
         string DeviceFingerprint(Zeus.DeviceConfiguration device);
         void ValidateDevice(Zeus.DeviceConfiguration device, string path);
@@ -167,7 +167,6 @@ namespace Zeus
     {
         public static Zeus.ZeusHostBuilder AddJson(this Zeus.ZeusHostBuilder builder, string json, string sourceName = "配置") { }
         public static Zeus.ZeusHostBuilder AddJsonFile(this Zeus.ZeusHostBuilder builder, string path, bool watch = true) { }
-        public static void ReloadAcquisition(this Zeus.IZeusHost host, string path) { }
         public static System.Threading.Tasks.Task ReloadAsync(this Zeus.IZeusHost host, string? path = null, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public static class ZeusJsonBinders
