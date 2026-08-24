@@ -33,8 +33,8 @@
 
 - 🔌 **Channels** — Serial, TCP, UDP client/server, and virtual channels through one consistent API
 - 📡 **Protocols** — Custom frames, Modbus RTU/TCP/ASCII, Mitsubishi MC 1E/3E/4E Binary/ASCII, Siemens S7 TCP, Omron FINS UDP/TCP, Omron Host Link ASCII, Panasonic MEWTOCOL-COM, Allen-Bradley EtherNet/IP CIP, DL/T 645-2007, IEC 60870-5-104, MQTT 3.1.1, and SNMP v2c, with virtual slave/PLC/meter/Broker/Agent support
-- 📊 **Acquisition** — Define a point table once, poll on intervals, keep the latest successful sample, calculate alarm limits, and write writable points back by name
-- 🧭 **Tracing** — Channel-level TX/RX packet events, rolling in-memory records, file logging, `builder.Logging`, and `AddCommunicationLogging` structured logs
+- 📊 **Acquisition** — Define a point table once, poll on intervals, keep current snapshots, calculate alarm limits, and write writable points back by name
+- 🧭 **Tracing** — Channel-level TX/RX packet events, rolling in-memory records, `builder.Logging`, and `AddCommunicationLogging` structured logs
 - 🖥️ **Desktop UI** — WinForms binds controls directly; WPF uses MVVM binding sources with Dispatcher marshaling
 - 🧾 **JSON configuration** — Change ports and slave addresses in the field without recompiling
 - 🧪 **Hardware optional at first** — Virtual channels use the same programming model as real devices

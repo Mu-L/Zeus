@@ -23,6 +23,7 @@
 - WPF：删除控件级绑定扩展，统一使用 `AttachZeus`、`WpfUiDispatcher` 和 MVVM 绑定源
 - 点表历史：删除内置采样历史、`GetHistory`、`IPointHistoryStore`、`FilePointHistoryStore`、`AddPointHistoryFile`、`AddPointHistoryStore` 和 JSON `pointHistoryFile`
 - 趋势绑定：删除 `PointHistoryBindingSource`、`BindHistory`、`BindChart`、`BindDashboard`、`AsHistoryBindingSource`、`PointChartSample` 和 `PointDashboardSnapshot`；历史存储与图表序列由业务层订阅 `Changed` / `BatchChanged` 后自行维护
+- 通信追踪：删除 `ChannelTraceFileLogger`；框架只提供 `PacketTraced`、`ChannelTraceBuffer` 和 `ILogger` 结构化日志，文件写入由应用自己决定
 - EtherNet/IP：删除 `AddAllenBradleyEtherNetIp`，统一使用 `AddEtherNetIp`
 - Omron FINS：删除 `AddOmronFinsUdp` / `AddOmronFinsTcp`，统一使用 `AddOmronFins(..., FinsTransport)`
 
@@ -382,7 +383,7 @@
 ### 包含
 
 - 宿主生命周期：`ZeusHost.Create`、`StartAsync` / `StopAsync`
-- 通道：串口、TCP/UDP 客户端、虚拟通道、TX/RX 报文追踪、滚动内存记录器与文件日志器
+- 通道：串口、TCP/UDP 客户端、虚拟通道、TX/RX 报文追踪与滚动内存记录器
 - 协议：自定义帧、按匹配器等待应答、Modbus RTU/TCP（功能码 01–06、0F、10、16）
 - 设备与点表：登记设备、周期采集、连续地址合并读取、成功采样历史缓冲、点表报警限
 - 配置：JSON 装载通道与设备；采集间隔可在运行中更新

@@ -33,8 +33,8 @@
 
 - 🔌 **通道** — 串口、TCP、UDP 客户端 / 服务端、虚拟通道，同一套 API
 - 📡 **协议** — 自定义帧、Modbus RTU / TCP / ASCII、Mitsubishi MC 1E/3E/4E Binary/ASCII、Siemens S7 TCP、Omron FINS UDP/TCP、Omron Host Link ASCII、Panasonic MEWTOCOL-COM、Allen-Bradley EtherNet/IP CIP、DL/T 645-2007、IEC 60870-5-104、MQTT 3.1.1、SNMP v2c，可挂虚拟从站/PLC/表计/Broker/Agent
-- 📊 **采集** — 声明点表后按间隔自动轮询，保留最近成功采样，计算报警限；可写点按名称写回
-- 🧭 **追踪** — 通道级 TX/RX 报文事件、滚动内存记录器、文件日志器、`builder.Logging` 与 `AddCommunicationLogging` 结构化日志
+- 📊 **采集** — 声明点表后按间隔自动轮询，保留当前快照，计算报警限；可写点按名称写回
+- 🧭 **追踪** — 通道级 TX/RX 报文事件、滚动内存记录器、`builder.Logging` 与 `AddCommunicationLogging` 结构化日志
 - 🖥️ **桌面界面** — WinForms 直接绑定控件；WPF 使用 MVVM 绑定源和 Dispatcher 封送
 - 🧾 **JSON 配置** — 现场改端口和从站地址，不必重新编译
 - 🧪 **可先不接硬件** — 虚拟通道与真实设备用法相同
