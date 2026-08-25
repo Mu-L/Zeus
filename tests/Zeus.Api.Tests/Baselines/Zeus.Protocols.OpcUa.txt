@@ -1,0 +1,186 @@
+namespace Zeus
+{
+    public sealed class OpcUaClient : System.IAsyncDisposable
+    {
+        public OpcUaClient(Zeus.IChannel channel, Zeus.OpcUaOptions? options = null, System.TimeSpan? timeout = default, string? fallbackName = null) { }
+        public Zeus.IChannel Channel { get; }
+        public bool IsSessionActive { get; }
+        public Zeus.OpcUaOptions Options { get; }
+        public System.Threading.Tasks.Task ConnectAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.OpcUaValue>> ReadAsync(System.Collections.Generic.IReadOnlyList<Zeus.OpcUaNodeId> nodeIds, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Zeus.OpcUaValue> ReadAsync(string nodeId, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<string> ReadTextAsync(string nodeId, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task WriteAsync([System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "NodeId",
+                "Value"})] System.Collections.Generic.IReadOnlyList<System.ValueTuple<Zeus.OpcUaNodeId, Zeus.OpcUaValue>> items, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task WriteAsync(string nodeId, Zeus.OpcUaValue value, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public enum OpcUaDataType
+    {
+        Boolean = 1,
+        SByte = 2,
+        Byte = 3,
+        Int16 = 4,
+        UInt16 = 5,
+        Int32 = 6,
+        UInt32 = 7,
+        Int64 = 8,
+        UInt64 = 9,
+        Float = 10,
+        Double = 11,
+        String = 12,
+        DateTime = 13,
+        ByteString = 15,
+    }
+    public sealed class OpcUaDevice : Zeus.DeviceBase, System.IAsyncDisposable, Zeus.IAcquisitionSource, Zeus.IPointWriter
+    {
+        public OpcUaDevice(string name, Zeus.IChannel channel, Zeus.OpcUaOptions? options = null, System.TimeSpan? timeout = default, Zeus.OpcUaPointMap? pointMap = null, Microsoft.Extensions.Logging.ILogger<Zeus.OpcUaDevice>? logger = null) { }
+        public Zeus.OpcUaClient Client { get; }
+        public System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Zeus.OpcUaValue> ReadNodeAsync(string nodeId, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task WriteAsync(string pointName, object value, Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task WriteNodeAsync(string nodeId, Zeus.OpcUaValue value, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public sealed class OpcUaException : Zeus.ZeusProtocolException
+    {
+        public OpcUaException(string message) { }
+        public OpcUaException(uint statusCode, string message) { }
+        public uint StatusCode { get; }
+    }
+    public sealed class OpcUaJsonBinder : Zeus.IZeusJsonBinder
+    {
+        public OpcUaJsonBinder() { }
+        public System.Collections.Generic.IReadOnlyList<string> DeviceTypes { get; }
+        public System.Collections.Generic.IReadOnlyList<string> ResponderTypes { get; }
+        public void ApplyDevice(Zeus.DeviceConfiguration device, Zeus.ZeusHostBuilder? builder = null, Zeus.IZeusHost? host = null) { }
+        public Zeus.IVirtualResponder? CreateResponder(Zeus.ChannelConfiguration channel) { }
+        public string DeviceFingerprint(Zeus.DeviceConfiguration device) { }
+        public void ValidateDevice(Zeus.DeviceConfiguration device, string path) { }
+        public void ValidateResponder(Zeus.ChannelConfiguration channel, string path) { }
+    }
+    public sealed class OpcUaNodeId : System.IEquatable<Zeus.OpcUaNodeId>
+    {
+        public OpcUaNodeId(ushort namespaceIndex, Zeus.OpcUaNodeIdType identifierType, object identifier) { }
+        public object Identifier { get; }
+        public Zeus.OpcUaNodeIdType IdentifierType { get; }
+        public ushort NamespaceIndex { get; }
+        public bool Equals(Zeus.OpcUaNodeId? other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public override string ToString() { }
+        public static Zeus.OpcUaNodeId Numeric(uint identifier, ushort namespaceIndex = 0) { }
+        public static Zeus.OpcUaNodeId Parse(string text) { }
+        public static Zeus.OpcUaNodeId String(string identifier, ushort namespaceIndex = 0) { }
+    }
+    public enum OpcUaNodeIdType
+    {
+        Numeric = 0,
+        String = 1,
+        Guid = 2,
+        Opaque = 3,
+    }
+    public sealed class OpcUaOptions
+    {
+        public OpcUaOptions() { }
+        public bool Anonymous { get; set; }
+        public string? ApplicationName { get; set; }
+        public string? ApplicationUri { get; set; }
+        public bool AutomaticReconnect { get; set; }
+        public string? EndpointUrl { get; set; }
+        public string? Password { get; set; }
+        public double RequestedSessionTimeout { get; set; }
+        public string? SessionName { get; set; }
+        public string? Username { get; set; }
+    }
+    public sealed class OpcUaPointMap
+    {
+        public OpcUaPointMap() { }
+        public Zeus.OpcUaPointMap Boolean(string name, string nodeId) { }
+        public Zeus.OpcUaPointMap ByteString(string name, string nodeId) { }
+        public Zeus.OpcUaPointMap DateTime(string name, string nodeId) { }
+        public Zeus.OpcUaPointMap Double(string name, string nodeId, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap Float(string name, string nodeId, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap Int32(string name, string nodeId, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap Int64(string name, string nodeId, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap String(string name, string nodeId) { }
+        public Zeus.OpcUaPointMap Typed(string name, string nodeId, Zeus.OpcUaDataType dataType, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap UInt32(string name, string nodeId, double? scale = default, Zeus.PointAlarmLimits? alarmLimits = null) { }
+        public Zeus.OpcUaPointMap WithAlarmLimits(string name, double? low = default, double? high = default) { }
+        public Zeus.OpcUaPointMap Writable(string name) { }
+    }
+    public sealed class OpcUaPointSpec : System.IEquatable<Zeus.OpcUaPointSpec>
+    {
+        public OpcUaPointSpec(string Name, Zeus.OpcUaNodeId NodeId, Zeus.OpcUaDataType DataType, Zeus.PointValueKind Kind, double? Scale, Zeus.PointAlarmLimits? AlarmLimits, bool Writable) { }
+        public Zeus.PointAlarmLimits? AlarmLimits { get; init; }
+        public Zeus.OpcUaDataType DataType { get; init; }
+        public Zeus.PointValueKind Kind { get; init; }
+        public string Name { get; init; }
+        public Zeus.OpcUaNodeId NodeId { get; init; }
+        public double? Scale { get; init; }
+        public bool Writable { get; init; }
+    }
+    public sealed class OpcUaServerMemory
+    {
+        public OpcUaServerMemory() { }
+        public void Set(string nodeId, Zeus.OpcUaValue value, bool writable = true) { }
+        public void SetBoolean(string nodeId, bool value, bool writable = true) { }
+        public void SetDouble(string nodeId, double value, bool writable = true) { }
+        public void SetInt32(string nodeId, int value, bool writable = true) { }
+        public void SetText(string nodeId, string value, bool writable = true) { }
+        public bool TryGet(string nodeId, out Zeus.OpcUaValue? value) { }
+        public uint TrySet(string nodeId, Zeus.OpcUaValue value) { }
+    }
+    public sealed class OpcUaServerResponder : Zeus.IVirtualResponder
+    {
+        public OpcUaServerResponder(Zeus.OpcUaServerMemory? memory = null, string? username = null, string? password = null) { }
+        public Zeus.OpcUaServerMemory Memory { get; }
+        public System.Threading.Tasks.Task<System.ReadOnlyMemory<byte>?> RespondAsync(System.ReadOnlyMemory<byte> request, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public static class OpcUaStatusCodes
+    {
+        public const uint BadDecodingError = 2147942400u;
+        public const uint BadEncodingError = 2147876864u;
+        public const uint BadIdentityTokenInvalid = 2149580800u;
+        public const uint BadNodeIdUnknown = 2150891520u;
+        public const uint BadNotWritable = 2151350272u;
+        public const uint BadSecureChannelIdInvalid = 2149711872u;
+        public const uint BadSecurityPolicyRejected = 2153054208u;
+        public const uint BadServiceUnsupported = 2148204544u;
+        public const uint BadSessionIdInvalid = 2149908480u;
+        public const uint BadTimeout = 2148139008u;
+        public const uint BadTypeMismatch = 2155085824u;
+        public const uint Good = 0u;
+        public static bool IsGood(uint statusCode) { }
+    }
+    public sealed class OpcUaValue : System.IEquatable<Zeus.OpcUaValue>
+    {
+        public OpcUaValue(Zeus.OpcUaDataType DataType, object? Value, uint StatusCode = 0, System.DateTime? SourceTimestamp = default) { }
+        public Zeus.OpcUaDataType DataType { get; init; }
+        public System.DateTime? SourceTimestamp { get; init; }
+        public uint StatusCode { get; init; }
+        public object? Value { get; init; }
+        public static Zeus.OpcUaValue Boolean(bool value) { }
+        public static Zeus.OpcUaValue Byte(byte value) { }
+        public static Zeus.OpcUaValue ByteString(byte[] value) { }
+        public static Zeus.OpcUaValue DateTime(System.DateTime value) { }
+        public static Zeus.OpcUaValue Double(double value) { }
+        public static Zeus.OpcUaValue Float(float value) { }
+        public static Zeus.OpcUaValue FromObject(Zeus.OpcUaDataType dataType, object value) { }
+        public static Zeus.OpcUaValue Int16(short value) { }
+        public static Zeus.OpcUaValue Int32(int value) { }
+        public static Zeus.OpcUaValue Int64(long value) { }
+        public static Zeus.OpcUaValue SByte(sbyte value) { }
+        public static Zeus.OpcUaValue String(string value) { }
+        public static Zeus.OpcUaValue UInt16(ushort value) { }
+        public static Zeus.OpcUaValue UInt32(uint value) { }
+        public static Zeus.OpcUaValue UInt64(ulong value) { }
+    }
+    public static class ZeusHostBuilderOpcUaExtensions
+    {
+        public static Zeus.OpcUaDevice AddOpcUa(this Zeus.IZeusHost host, string deviceName, string channelName, Zeus.OpcUaOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.OpcUaPointMap>? points = null) { }
+        public static Zeus.ZeusHostBuilder AddOpcUa(this Zeus.ZeusHostBuilder builder, string deviceName, string channelName, Zeus.OpcUaOptions? options = null, System.TimeSpan? timeout = default, System.Action<Zeus.OpcUaPointMap>? points = null) { }
+    }
+}

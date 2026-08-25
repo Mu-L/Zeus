@@ -46,6 +46,7 @@ dotnet new zeus-modbus -n MyOven
 | [Zeus.Protocols.Dlt645](https://www.nuget.org/packages/Zeus.Protocols.Dlt645) | DL/T 645-2007 |
 | [Zeus.Protocols.Iec104](https://www.nuget.org/packages/Zeus.Protocols.Iec104) | IEC 60870-5-104 |
 | [Zeus.Protocols.Mqtt](https://www.nuget.org/packages/Zeus.Protocols.Mqtt) | MQTT 3.1.1 |
+| [Zeus.Protocols.OpcUa](https://www.nuget.org/packages/Zeus.Protocols.OpcUa) | OPC UA |
 | [Zeus.Protocols.Snmp](https://www.nuget.org/packages/Zeus.Protocols.Snmp) | SNMP v2c |
 | [Zeus.Configuration](https://www.nuget.org/packages/Zeus.Configuration) | JSON 工程配置（不拖协议；请同时引用所用协议包） |
 | [Zeus.Presentation.Abstractions](https://www.nuget.org/packages/Zeus.Presentation.Abstractions) | UI 无关绑定 |

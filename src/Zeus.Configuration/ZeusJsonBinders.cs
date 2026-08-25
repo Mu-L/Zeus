@@ -21,6 +21,7 @@ public static class ZeusJsonBinders
         "Zeus.Protocols.Dlt645",
         "Zeus.Protocols.Iec104",
         "Zeus.Protocols.Mqtt",
+        "Zeus.Protocols.OpcUa",
         "Zeus.Protocols.Snmp"
     ];
 
@@ -38,6 +39,9 @@ public static class ZeusJsonBinders
         ["dlt645"] = "Zeus.Protocols.Dlt645",
         ["iec104"] = "Zeus.Protocols.Iec104",
         ["mqtt"] = "Zeus.Protocols.Mqtt",
+        ["opcua"] = "Zeus.Protocols.OpcUa",
+        ["opc-ua"] = "Zeus.Protocols.OpcUa",
+        ["opc.ua"] = "Zeus.Protocols.OpcUa",
         ["snmp"] = "Zeus.Protocols.Snmp"
     };
 
@@ -53,6 +57,7 @@ public static class ZeusJsonBinders
         ["dlt645"] = "Zeus.Protocols.Dlt645",
         ["iec104"] = "Zeus.Protocols.Iec104",
         ["mqtt"] = "Zeus.Protocols.Mqtt",
+        ["opcua"] = "Zeus.Protocols.OpcUa",
         ["snmp"] = "Zeus.Protocols.Snmp"
     };
 

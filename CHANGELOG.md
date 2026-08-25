@@ -1,5 +1,11 @@
 # 更新记录
 
+## 未发布
+
+### 包含
+
+- OPC UA：新增 `Zeus.Protocols.OpcUa`，支持 opc.tcp、SecurityPolicy None、匿名或用户名密码、会话、批量 Value 读写、NodeId 点表、JSON 配置和虚拟 Server 联调
+
 ## 0.19.0
 
 补齐操作员报警队列、面向 ViewModel 的绑定，以及宿主生命周期与窗口解耦。同时清掉仍在跑的双路径与旧写法回退。

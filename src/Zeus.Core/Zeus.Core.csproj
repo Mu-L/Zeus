@@ -31,6 +31,7 @@
     <InternalsVisibleTo Include="Zeus.Protocols.Mewtocol" />
     <InternalsVisibleTo Include="Zeus.Protocols.Modbus" />
     <InternalsVisibleTo Include="Zeus.Protocols.Mqtt" />
+    <InternalsVisibleTo Include="Zeus.Protocols.OpcUa" />
     <InternalsVisibleTo Include="Zeus.Protocols.S7" />
     <InternalsVisibleTo Include="Zeus.Protocols.Snmp" />
     <InternalsVisibleTo Include="Zeus.Tests" />

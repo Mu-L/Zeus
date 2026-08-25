@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\Zeus.Protocols.Dlt645\Zeus.Protocols.Dlt645.csproj" />
     <ProjectReference Include="..\..\src\Zeus.Protocols.Iec104\Zeus.Protocols.Iec104.csproj" />
     <ProjectReference Include="..\..\src\Zeus.Protocols.Mqtt\Zeus.Protocols.Mqtt.csproj" />
+    <ProjectReference Include="..\..\src\Zeus.Protocols.OpcUa\Zeus.Protocols.OpcUa.csproj" />
     <ProjectReference Include="..\..\src\Zeus.Protocols.Snmp\Zeus.Protocols.Snmp.csproj" />
   </ItemGroup>
 
@@ -53,6 +54,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="zeus-snmp.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="zeus-opcua.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

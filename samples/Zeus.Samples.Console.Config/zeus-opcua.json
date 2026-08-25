@@ -1,0 +1,39 @@
+{
+  "acquisition": {
+    "intervalMilliseconds": 500,
+    "pollImmediately": true
+  },
+  "channels": [
+    {
+      "name": "opcua-link",
+      "type": "virtual",
+      "options": {
+        "responder": "opcua"
+      }
+    }
+  ],
+  "devices": [
+    {
+      "name": "server",
+      "channel": "opcua-link",
+      "type": "opcua",
+      "points": [
+        {
+          "name": "serverName",
+          "options": {
+            "nodeId": "ns=2;s=ServerName",
+            "dataType": "string",
+            "writable": true
+          }
+        },
+        {
+          "name": "currentTime",
+          "options": {
+            "nodeId": "i=2258",
+            "dataType": "datetime"
+          }
+        }
+      ]
+    }
+  ]
+}
