@@ -1,10 +1,13 @@
 # 更新记录
 
-## 未发布
+## 0.20.0
+
+新增 OPC UA 协议包，补齐常见现场 Server 的 opc.tcp 读写、点表采集和 JSON 配置路径。
 
 ### 包含
 
 - OPC UA：新增 `Zeus.Protocols.OpcUa`，支持 opc.tcp、SecurityPolicy None、匿名或用户名密码、会话、批量 Value 读写、NodeId 点表、JSON 配置和虚拟 Server 联调
+- OPC UA：标准 ServiceFault 会按 ResponseHeader 的 StatusCode 抛出，非法 NodeId 统一包装为 `OpcUaException`，非 Good DataValue 会先保留状态码再进入点表错误快照
 
 ## 0.19.0
 

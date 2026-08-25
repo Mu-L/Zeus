@@ -13,13 +13,13 @@
     <Product>Zeus</Product>
     <Description>面向 .NET 的 UI 无关上位机开发框架。把复杂留给 Zeus，把简单留给用户。</Description>
     <Copyright>Copyright © Zeus</Copyright>
-    <Version>0.19.0</Version>
+    <Version>0.20.0</Version>
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <IsPackable>false</IsPackable>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>zeus;host;modbus;mitsubishi;mc;siemens;s7;omron;fins;host-link;panasonic;mewtocol;ethernet-ip;cip;allen-bradley;dlt645;iec104;iec-60870-5-104;mqtt;mqtt311;snmp;snmpv2c;opcua;opc-ua;message-queue;electric-meter;serial;tcp;udp;winforms;wpf;industrial;scada</PackageTags>
-    <PackageReleaseNotes>0.19.0：报警等级/区域/责任人/搁置/抑制；ViewModel 用 SynchronizationContext 与整表绑定源，不必再绑控件；AttachZeus 跟窗口寿命绑定，不绑窗口用 AttachManually；去掉服务端 port 回退、FINS 双 type、ReloadAcquisition 与同步 Respond。</PackageReleaseNotes>
+    <PackageReleaseNotes>0.20.0：新增 Zeus.Protocols.OpcUa，支持 opc.tcp、SecurityPolicy None、匿名或用户名密码、会话、批量 Value 读写、NodeId 点表、JSON 配置和虚拟 Server 联调。</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/Mokode-dev/Zeus</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Mokode-dev/Zeus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
