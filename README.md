@@ -36,7 +36,7 @@
 - 📊 **Acquisition** — Define a point table once, poll on intervals, keep current snapshots, calculate alarm limits, and write writable points back by name
 - 🧭 **Tracing** — Channel-level TX/RX packet events, rolling in-memory records, `builder.Logging`, and `AddCommunicationLogging` structured logs
 - 🖥️ **Desktop UI** — WinForms binds controls directly; WPF uses MVVM binding sources with Dispatcher marshaling
-- 🧾 **JSON configuration** — Change ports and slave addresses in the field without recompiling
+- 🧾 **JSON configuration** — Change ports and unit ids in the field without recompiling; protocol settings live under `options`
 - 🧪 **Hardware optional at first** — Virtual channels use the same programming model as real devices
 
 ## 🚀 Quick Start

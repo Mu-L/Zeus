@@ -85,18 +85,18 @@ public sealed class Iec104Tests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "iec-link", "type": "virtual", "responder": "iec104", "commonAddress": 7 }
+                { "name": "iec-link", "type": "virtual", "options": { "responder": "iec104", "commonAddress": 7 } }
               ],
               "devices": [
                 {
                   "name": "station",
                   "channel": "iec-link",
                   "type": "iec104",
-                  "commonAddress": 7,
+                  "options": { "commonAddress": 7 },
                   "points": [
-                    { "name": "running", "address": 1, "dataType": "single-point", "writable": true },
-                    { "name": "temperature", "address": 100, "dataType": "scaled", "scale": 0.1, "writable": true },
-                    { "name": "pressure", "address": 200, "dataType": "short-float" }
+                    { "name": "running", "options": { "address": 1, "dataType": "single-point", "writable": true } },
+                    { "name": "temperature", "options": { "address": 100, "dataType": "scaled", "scale": 0.1, "writable": true } },
+                    { "name": "pressure", "options": { "address": 200, "dataType": "short-float" } }
                   ]
                 }
               ]

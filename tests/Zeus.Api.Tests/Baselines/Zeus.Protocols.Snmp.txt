@@ -46,7 +46,7 @@ namespace Zeus
         public System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         public System.Threading.Tasks.Task<Zeus.SnmpValue> GetAsync(string oid, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task SetAsync(string oid, Zeus.SnmpValue value, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task WriteAsync(string pointName, object value, Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
     }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://docs.greekmythology.cn/schemas/zeus.json",
   "title": "Zeus JSON 工程配置",
-  "description": "Zeus 通道、设备、点表、采集与重连配置。",
+  "description": "Zeus 通道、设备、点表、采集与重连配置。通道类型、协议和点位参数统一写入 options。",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -43,28 +43,10 @@
       "additionalProperties": false,
       "description": "周期采集配置。",
       "properties": {
-        "intervalMilliseconds": {
-          "type": "integer",
-          "minimum": 1,
-          "default": 500,
-          "description": "两轮采集间隔，单位毫秒。"
-        },
-        "pollImmediately": {
-          "type": "boolean",
-          "default": true,
-          "description": "启动后是否立刻采第一轮。"
-        },
-        "sourceTimeoutMilliseconds": {
-          "type": "integer",
-          "minimum": 0,
-          "default": 0,
-          "description": "单个采集源本轮超时，0 表示不在宿主层额外限时。"
-        },
-        "serializePerChannel": {
-          "type": "boolean",
-          "default": true,
-          "description": "同一通道上的设备是否串行轮询。"
-        }
+        "intervalMilliseconds": { "type": "integer", "minimum": 1, "default": 500 },
+        "pollImmediately": { "type": "boolean", "default": true },
+        "sourceTimeoutMilliseconds": { "type": "integer", "minimum": 0, "default": 0 },
+        "serializePerChannel": { "type": "boolean", "default": true }
       }
     },
     "reconnect": {
@@ -75,43 +57,18 @@
         "enabled": { "type": "boolean", "default": true },
         "initialDelayMilliseconds": { "type": "integer", "minimum": 0, "default": 1000 },
         "maxDelayMilliseconds": { "type": "integer", "minimum": 0, "default": 30000 },
-        "backoffMultiplier": { "type": "number", "minimum": 1, "default": 2 }
+        "backoffMultiplier": { "type": "number", "minimum": 1, "default": 2 },
+        "maxAttempts": { "type": "integer", "minimum": 0, "default": 0 },
+        "jitterRatio": { "type": "number", "minimum": 0, "default": 0 },
+        "circuitBreakMilliseconds": { "type": "integer", "minimum": 0, "default": 0 }
       }
     },
-    "channel": {
+    "channelOptions": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [ "name", "type" ],
-      "allOf": [
-        {
-          "if": { "properties": { "type": { "const": "serial" } }, "required": [ "type" ] },
-          "then": { "required": [ "portName" ] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "tcp" } }, "required": [ "type" ] },
-          "then": { "required": [ "host", "port" ] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "udp" } }, "required": [ "type" ] },
-          "then": { "required": [ "host", "port" ] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "tcp-server" } }, "required": [ "type" ] },
-          "then": { "required": [ "localPort" ] }
-        },
-        {
-          "if": { "properties": { "type": { "const": "udp-server" } }, "required": [ "type" ] },
-          "then": { "required": [ "localPort" ] }
-        }
-      ],
+      "additionalProperties": true,
+      "default": {},
+      "description": "通道类型和虚拟从站专属选项。",
       "properties": {
-        "name": { "$ref": "#/$defs/name" },
-        "type": {
-          "type": "string",
-          "enum": [ "virtual", "serial", "tcp", "tcp-server", "udp", "udp-server" ],
-          "default": "virtual",
-          "description": "通道类型。"
-        },
         "portName": { "type": "string", "description": "串口名，例如 COM3。" },
         "baudRate": { "type": "integer", "minimum": 1, "default": 115200 },
         "host": { "type": "string", "description": "TCP/UDP 客户端对端主机。" },
@@ -120,34 +77,22 @@
         "localPort": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 0 },
         "responder": {
           "type": "string",
-          "enum": [ "modbus", "mc", "s7", "fins", "host-link", "mewtocol", "ethernet-ip", "dlt645", "iec104", "mqtt", "snmp" ],
-          "description": "virtual 通道挂接的虚拟从站/PLC/表计/Broker/Agent。"
+          "enum": [ "modbus", "mc", "s7", "fins", "host-link", "mewtocol", "ethernet-ip", "dlt645", "iec104", "mqtt", "snmp" ]
         },
         "unitId": { "type": "integer", "minimum": 0, "maximum": 255, "default": 1 },
-        "transport": {
-          "type": "string",
-          "enum": [ "rtu", "tcp", "ascii", "udp" ],
-          "default": "rtu",
-          "description": "虚拟 Modbus 支持 rtu/tcp/ascii；虚拟 FINS 支持 udp/tcp。"
-        },
+        "transport": { "type": "string", "enum": [ "rtu", "tcp", "ascii", "udp" ], "default": "rtu" },
         "meterAddress": { "type": "string", "pattern": "^[0-9]{12}$", "default": "000000000001" },
         "commonAddress": { "type": "integer", "minimum": 0, "default": 1 },
         "snmpCommunity": { "type": "string", "default": "public" },
         "snmpWriteCommunity": { "type": "string" }
       }
     },
-    "device": {
+    "deviceOptions": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [ "name", "channel", "type" ],
+      "additionalProperties": true,
+      "default": {},
+      "description": "设备协议专属选项。",
       "properties": {
-        "name": { "$ref": "#/$defs/name" },
-        "channel": { "$ref": "#/$defs/name" },
-        "type": {
-          "type": "string",
-          "enum": [ "modbus-rtu", "modbus-tcp", "modbus-ascii", "mitsubishi-mc", "siemens-s7", "omron-fins", "omron-host-link", "panasonic-mewtocol", "ethernet-ip", "dlt645", "iec104", "mqtt", "snmp" ],
-          "default": "modbus-rtu"
-        },
         "transport": { "type": "string", "enum": [ "", "udp", "tcp" ], "default": "" },
         "unitId": { "type": "integer", "minimum": 0, "maximum": 255, "default": 1 },
         "timeoutMilliseconds": { "type": "integer", "minimum": 1 },
@@ -201,27 +146,15 @@
         "mqttAutomaticReconnect": { "type": "boolean", "default": true },
         "snmpCommunity": { "type": "string", "default": "public" },
         "snmpWriteCommunity": { "type": "string" },
-        "snmpInitialRequestId": { "type": "integer", "minimum": 1, "default": 1 },
-        "points": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/point" },
-          "default": []
-        }
+        "snmpInitialRequestId": { "type": "integer", "minimum": 1, "default": 1 }
       }
     },
-    "point": {
+    "pointOptions": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [ "name" ],
-      "not": {
-        "required": [ "table", "writable" ],
-        "properties": {
-          "table": { "enum": [ "input", "discrete" ] },
-          "writable": { "const": true }
-        }
-      },
+      "additionalProperties": true,
+      "default": {},
+      "description": "点位地址、数据类型、缩放、报警和写权限选项。",
       "properties": {
-        "name": { "$ref": "#/$defs/name" },
         "topic": { "type": "string" },
         "oid": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)+$" },
         "mqttQos": { "type": "string", "enum": [ "0", "1", "2" ], "default": "0" },
@@ -251,6 +184,56 @@
         "alarmArea": { "type": "string" },
         "alarmAssignee": { "type": "string" },
         "writable": { "type": "boolean", "default": false }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "name", "type" ],
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "serial" } }, "required": [ "type" ] }, "then": { "required": [ "options" ], "properties": { "options": { "required": [ "portName" ] } } } },
+        { "if": { "properties": { "type": { "const": "tcp" } }, "required": [ "type" ] }, "then": { "required": [ "options" ], "properties": { "options": { "required": [ "host", "port" ] } } } },
+        { "if": { "properties": { "type": { "const": "udp" } }, "required": [ "type" ] }, "then": { "required": [ "options" ], "properties": { "options": { "required": [ "host", "port" ] } } } },
+        { "if": { "properties": { "type": { "const": "tcp-server" } }, "required": [ "type" ] }, "then": { "required": [ "options" ], "properties": { "options": { "required": [ "localPort" ] } } } },
+        { "if": { "properties": { "type": { "const": "udp-server" } }, "required": [ "type" ] }, "then": { "required": [ "options" ], "properties": { "options": { "required": [ "localPort" ] } } } }
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "type": { "type": "string", "enum": [ "virtual", "serial", "tcp", "tcp-server", "udp", "udp-server" ], "default": "virtual" },
+        "startup": { "type": "string", "enum": [ "required", "optional", "degraded", "degraded-allowed" ], "default": "required" },
+        "options": { "$ref": "#/$defs/channelOptions" }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "name", "channel", "type" ],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "channel": { "$ref": "#/$defs/name" },
+        "type": { "type": "string", "enum": [ "modbus-rtu", "modbus-tcp", "modbus-ascii", "mitsubishi-mc", "siemens-s7", "omron-fins", "omron-host-link", "panasonic-mewtocol", "ethernet-ip", "dlt645", "iec104", "mqtt", "snmp" ], "default": "modbus-rtu" },
+        "options": { "$ref": "#/$defs/deviceOptions" },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/point" }, "default": [] }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "name" ],
+      "not": {
+        "properties": {
+          "options": {
+            "required": [ "table", "writable" ],
+            "properties": {
+              "table": { "enum": [ "input", "discrete" ] },
+              "writable": { "const": true }
+            }
+          }
+        }
+      },
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "options": { "$ref": "#/$defs/pointOptions" }
       }
     }
   }

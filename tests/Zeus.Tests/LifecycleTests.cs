@@ -126,6 +126,77 @@ public sealed class LifecycleTests
     }
 
     /// <summary>
+    /// 运行中新增 required 通道打开失败时，应从目录回滚，避免留下半注册故障通道。
+    /// </summary>
+    [Fact]
+    public async Task AddRequiredChannelAsync_RollsBackWhenOpenFails()
+    {
+        await using var host = ZeusHost.Create();
+        await host.StartAsync();
+
+        await Assert.ThrowsAsync<ZeusChannelException>(() =>
+            host.AddSerialPortAsync("bad", "ZEUS_MISSING_PORT", 9600));
+
+        Assert.False(host.Channels.TryGet("bad", out _));
+    }
+
+    /// <summary>
+    /// 自动重连成功时应发布 Scheduled/Succeeded，而不是把成功状态误报为 Cancelled。
+    /// </summary>
+    [Fact]
+    public async Task Host_ReconnectPublishesSucceededWithoutCancelled()
+    {
+        var channel = new RecoverableChannel("bus");
+        var states = new List<ReconnectState>();
+        var stateGate = new object();
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddReconnect(options =>
+            {
+                options.Enabled = true;
+                options.InitialDelay = TimeSpan.FromMilliseconds(30);
+                options.MaxDelay = TimeSpan.FromMilliseconds(30);
+                options.StateChanged += (_, e) =>
+                {
+                    lock (stateGate)
+                    {
+                        states.Add(e.State);
+                    }
+                };
+            });
+            builder.Register((_, channels, _) => channels.Add(channel));
+        });
+
+        await host.StartAsync();
+        channel.FailNextWrite = true;
+        await Assert.ThrowsAsync<ZeusChannelException>(() => channel.WriteAsync(new byte[] { 0x01 }));
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (stateGate)
+            {
+                if (states.Contains(ReconnectState.Succeeded))
+                {
+                    break;
+                }
+            }
+
+            await Task.Delay(20);
+        }
+
+        ReconnectState[] snapshot;
+        lock (stateGate)
+        {
+            snapshot = states.ToArray();
+        }
+
+        Assert.Contains(ReconnectState.Scheduled, snapshot);
+        Assert.Contains(ReconnectState.Succeeded, snapshot);
+        Assert.DoesNotContain(ReconnectState.Cancelled, snapshot);
+    }
+
+    /// <summary>
     /// 关闭自动重连后，故障通道必须保持 Faulted，直到调用方自行 OpenAsync。
     /// </summary>
     [Fact]
@@ -208,15 +279,15 @@ public sealed class LifecycleTests
             {
               "acquisition": { "intervalMilliseconds": 80, "pollImmediately": true },
               "channels": [
-                { "name": "bus", "type": "virtual", "responder": "modbus", "unitId": 1, "transport": "rtu" }
+                { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "rtu" } }
               ],
               "devices": [
                 {
                   "name": "oven",
                   "channel": "bus",
                   "type": "modbus-rtu",
-                  "unitId": 1,
-                  "points": [ { "name": "pv", "table": "holding", "address": 0 } ]
+                  "options": { "unitId": 1 },
+                  "points": [ { "name": "pv", "options": { "table": "holding", "address": 0 } } ]
                 }
               ]
             }
@@ -234,15 +305,15 @@ public sealed class LifecycleTests
                   "acquisition": { "intervalMilliseconds": 250, "pollImmediately": true },
                   "reconnect": { "enabled": true, "initialDelayMilliseconds": 500, "maxDelayMilliseconds": 5000, "backoffMultiplier": 2 },
                   "channels": [
-                    { "name": "bus", "type": "virtual", "responder": "modbus", "unitId": 1, "transport": "rtu" }
+                    { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "rtu" } }
                   ],
                   "devices": [
                     {
                       "name": "dryer",
                       "channel": "bus",
                       "type": "modbus-rtu",
-                      "unitId": 1,
-                      "points": [ { "name": "humidity", "table": "holding", "address": 1 } ]
+                      "options": { "unitId": 1 },
+                      "points": [ { "name": "humidity", "options": { "table": "holding", "address": 1 } } ]
                     }
                   ]
                 }
@@ -288,7 +359,7 @@ public sealed class LifecycleTests
             const string updated = """
                 {
                   "channels": [
-                    { "name": "meter", "type": "virtual", "unitId": 2 }
+                    { "name": "meter", "type": "virtual", "options": { "unitId": 2 } }
                   ]
                 }
                 """;

@@ -76,17 +76,17 @@ public sealed class HostLinkTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "host-link", "type": "virtual", "responder": "host-link", "unitId": 0 }
+                { "name": "host-link", "type": "virtual", "options": { "responder": "host-link", "unitId": 0 } }
               ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "host-link",
                   "type": "omron-host-link",
-                  "unitId": 0,
+                  "options": { "unitId": 0 },
                   "points": [
-                    { "name": "temperature", "area": "dm", "address": 100, "dataType": "word", "scale": 0.1, "writable": true },
-                    { "name": "running", "area": "cio", "address": 10, "bit": 0, "dataType": "bit", "writable": true }
+                    { "name": "temperature", "options": { "area": "dm", "address": 100, "dataType": "word", "scale": 0.1, "writable": true } },
+                    { "name": "running", "options": { "area": "cio", "address": 10, "bit": 0, "dataType": "bit", "writable": true } }
                   ]
                 }
               ]

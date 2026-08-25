@@ -14,9 +14,9 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
         ValidatePoints(device.Points, path);
@@ -25,10 +25,11 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
-        var transport = ZeusConfigurationText.Normalize(channel.Transport);
+        var transportValue = ZeusConfigurationOptions.GetString(channel.Options, "transport", "rtu", path);
+        var transport = ZeusConfigurationText.Normalize(transportValue);
         if (transport is not ("rtu" or "tcp" or "ascii"))
         {
-            throw new ZeusException($"{path}.transport「{channel.Transport}」不受支持。可选 rtu、tcp、ascii。");
+            throw new ZeusException($"{path}.options.transport「{transportValue}」不受支持。可选 rtu、tcp、ascii。");
         }
     }
 
@@ -77,25 +78,28 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
     {
-        if (ZeusConfigurationText.Normalize(channel.Responder) != "modbus")
+        if (ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) != "modbus")
         {
             return null;
         }
 
-        return new ModbusSlaveResponder(channel.UnitId, CreateChannelTransport(ZeusConfigurationText.Normalize(channel.Transport), channel.Transport));
+        var unitId = (byte)ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1);
+        var transport = ZeusConfigurationOptions.GetString(channel.Options, "transport", "rtu");
+        return new ModbusSlaveResponder(unitId, CreateChannelTransport(ZeusConfigurationText.Normalize(transport), transport!));
     }
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.UnitId, device.TimeoutMilliseconds);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static void Add(
         DeviceConfiguration device,
         Action<string, string, byte, TimeSpan?, Action<ModbusPointMap>?> add)
     {
         Action<ModbusPointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
-        var timeout = device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
-        add(device.Name.Trim(), device.Channel.Trim(), device.UnitId, timeout, points);
+        var timeout = ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
+        var unitId = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1);
+        add(device.Name.Trim(), device.Channel.Trim(), unitId, timeout, points);
     }
 
     private static ModbusTransport CreateDeviceTransport(string normalizedType, string original)
@@ -129,37 +133,41 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"{path}.name「{point.Name}」在同一设备内重复。");
             }
 
-            var table = ZeusConfigurationText.Normalize(point.Table);
+            var tableValue = ZeusConfigurationOptions.GetString(point.Options, "table", "holding", path);
+            var table = ZeusConfigurationText.Normalize(tableValue);
             if (table is not ("holding" or "input" or "coil" or "discrete"))
             {
-                throw new ZeusException($"{path}.table「{point.Table}」不受支持。可选 holding、input、coil、discrete。");
+                throw new ZeusException($"{path}.options.table「{tableValue}」不受支持。可选 holding、input、coil、discrete。");
             }
 
-            if (point.Address is < 0 or > ushort.MaxValue)
+            var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+            if (address is < 0 or > ushort.MaxValue)
             {
-                throw new ZeusException($"{path}.address 必须介于 0 与 65535 之间。");
+                throw new ZeusException($"{path}.options.address 必须介于 0 与 65535 之间。");
             }
 
-            if (point.Scale is <= 0)
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+            if (scale is <= 0)
             {
-                throw new ZeusException($"{path}.scale 必须大于 0。");
+                throw new ZeusException($"{path}.options.scale 必须大于 0。");
             }
 
             ZeusConfigurationText.ValidatePointAlarms(point, path);
-            if ((point.LowAlarmLimit is not null || point.HighAlarmLimit is not null)
+            if ((ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+                    || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
                 && table is "coil" or "discrete")
             {
-                throw new ZeusException($"{path} 是布尔点，不能配置 lowAlarmLimit 或 highAlarmLimit。");
+                throw new ZeusException($"{path} 是布尔点，不能配置 options.lowAlarmLimit 或 options.highAlarmLimit。");
             }
 
-            if (point.Writable && table is "input" or "discrete")
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable", path: path) && table is "input" or "discrete")
             {
-                throw new ZeusException($"{path} 位于只读数据区，不能设置 writable: true。");
+                throw new ZeusException($"{path} 位于只读数据区，不能设置 options.writable: true。");
             }
 
-            if (point.Signed && table is not ("holding" or "input"))
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "signed", path: path) && table is not ("holding" or "input"))
             {
-                throw new ZeusException($"{path}.signed 仅适用于 holding 或 input 寄存器。");
+                throw new ZeusException($"{path}.options.signed 仅适用于 holding 或 input 寄存器。");
             }
         }
     }
@@ -168,19 +176,22 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     {
         foreach (var point in points)
         {
-            var table = ZeusConfigurationText.Normalize(point.Table);
+            var table = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "table", "holding"));
             var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-            var scale = point.Scale ?? (point.Signed ? 1d : (double?)null);
+            var signed = ZeusConfigurationOptions.GetBoolean(point.Options, "signed");
+            var writable = ZeusConfigurationOptions.GetBoolean(point.Options, "writable");
+            var address = (ushort)ZeusConfigurationOptions.GetInt32(point.Options, "address");
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale") ?? (signed ? 1d : (double?)null);
             switch (table)
             {
                 case "holding":
-                    if (point.Signed)
+                    if (signed)
                     {
-                        map.HoldingRegister(point.Name, (ushort)point.Address, scale!.Value, signed: true, alarmLimits);
+                        map.HoldingRegister(point.Name, address, scale!.Value, signed: true, alarmLimits);
                     }
                     else if (scale is { } holdingScale)
                     {
-                        map.HoldingRegister(point.Name, (ushort)point.Address, holdingScale);
+                        map.HoldingRegister(point.Name, address, holdingScale);
                         if (alarmLimits is not null)
                         {
                             map.WithAlarmLimits(point.Name, alarmLimits);
@@ -188,27 +199,27 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                     }
                     else
                     {
-                        map.HoldingRegister(point.Name, (ushort)point.Address);
+                        map.HoldingRegister(point.Name, address);
                         if (alarmLimits is not null)
                         {
                             map.WithAlarmLimits(point.Name, alarmLimits);
                         }
                     }
 
-                    if (point.Writable)
+                    if (writable)
                     {
                         map.Writable(point.Name);
                     }
 
                     break;
                 case "input":
-                    if (point.Signed)
+                    if (signed)
                     {
-                        map.InputRegister(point.Name, (ushort)point.Address, scale!.Value, signed: true, alarmLimits);
+                        map.InputRegister(point.Name, address, scale!.Value, signed: true, alarmLimits);
                     }
                     else if (scale is { } inputScale)
                     {
-                        map.InputRegister(point.Name, (ushort)point.Address, inputScale);
+                        map.InputRegister(point.Name, address, inputScale);
                         if (alarmLimits is not null)
                         {
                             map.WithAlarmLimits(point.Name, alarmLimits);
@@ -216,7 +227,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
                     }
                     else
                     {
-                        map.InputRegister(point.Name, (ushort)point.Address);
+                        map.InputRegister(point.Name, address);
                         if (alarmLimits is not null)
                         {
                             map.WithAlarmLimits(point.Name, alarmLimits);
@@ -225,15 +236,15 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
 
                     break;
                 case "coil":
-                    map.Coil(point.Name, (ushort)point.Address);
-                    if (point.Writable)
+                    map.Coil(point.Name, address);
+                    if (writable)
                     {
                         map.Writable(point.Name);
                     }
 
                     break;
                 case "discrete":
-                    map.DiscreteInput(point.Name, (ushort)point.Address);
+                    map.DiscreteInput(point.Name, address);
                     break;
             }
         }

@@ -12,9 +12,9 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
     }
 
@@ -37,28 +37,28 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "iec104"
-            ? new Iec104SlaveResponder(new Iec104Options { CommonAddress = channel.CommonAddress })
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "iec104"
+            ? new Iec104SlaveResponder(new Iec104Options { CommonAddress = ZeusConfigurationOptions.GetInt32(channel.Options, "commonAddress", 1) })
             : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.CommonAddress, device.TimeoutMilliseconds, device.T1Milliseconds, device.T2Milliseconds, device.T3Milliseconds);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static Iec104Options Options(DeviceConfiguration device)
         => new()
         {
-            CommonAddress = device.CommonAddress,
-            OriginatorAddress = device.OriginatorAddress,
-            InterrogationQualifier = device.InterrogationQualifier,
-            T1 = TimeSpan.FromMilliseconds(device.T1Milliseconds),
-            T2 = TimeSpan.FromMilliseconds(device.T2Milliseconds),
-            T3 = TimeSpan.FromMilliseconds(device.T3Milliseconds),
-            MaxUnacknowledgedIFrames = device.MaxUnacknowledgedIFrames,
-            AcknowledgeWindow = device.AcknowledgeWindow
+            CommonAddress = ZeusConfigurationOptions.GetInt32(device.Options, "commonAddress", 1),
+            OriginatorAddress = ZeusConfigurationOptions.GetInt32(device.Options, "originatorAddress"),
+            InterrogationQualifier = ZeusConfigurationOptions.GetInt32(device.Options, "interrogationQualifier", 20),
+            T1 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t1Milliseconds", 15000)),
+            T2 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t2Milliseconds", 10000)),
+            T3 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t3Milliseconds", 20000)),
+            MaxUnacknowledgedIFrames = ZeusConfigurationOptions.GetInt32(device.Options, "maxUnacknowledgedIFrames", 12),
+            AcknowledgeWindow = ZeusConfigurationOptions.GetInt32(device.Options, "acknowledgeWindow", 8)
         };
 
     private static Action<Iec104PointMap>? Points(DeviceConfiguration device)
@@ -66,25 +66,27 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var dataType = ZeusConfigurationText.Normalize(point.DataType);
+                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled"));
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
+                var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
+                var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 switch (dataType)
                 {
                     case "single-point":
-                        map.SinglePoint(point.Name, point.Address);
+                        map.SinglePoint(point.Name, address);
                         break;
                     case "normalized":
-                        map.Normalized(point.Name, point.Address, point.Scale, alarmLimits);
+                        map.Normalized(point.Name, address, scale, alarmLimits);
                         break;
                     case "short-float":
-                        map.ShortFloat(point.Name, point.Address, point.Scale, alarmLimits);
+                        map.ShortFloat(point.Name, address, scale, alarmLimits);
                         break;
                     default:
-                        map.Scaled(point.Name, point.Address, point.Scale, alarmLimits);
+                        map.Scaled(point.Name, address, scale, alarmLimits);
                         break;
                 }
 
-                if (point.Writable)
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }

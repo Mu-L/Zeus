@@ -37,19 +37,16 @@ public static class PointTableUiExtensions
 
         void OnChanged(object? sender, PointChangedEventArgs e)
         {
-            if (PointUiFormatting.Matches(e.Current.Definition, key))
-            {
-                Apply(e.Current);
-            }
+            Apply(e.Current);
         }
 
-        if (table.All.FirstOrDefault(item => PointUiFormatting.Matches(item.Definition, key)) is { } existing)
+        if (table.TryGet(key, out var existing) && existing is not null)
         {
             Apply(existing);
         }
 
-        table.Changed += OnChanged;
-        return new DelegateUiBinding(() => table.Changed -= OnChanged);
+        var subscription = table.Subscribe(key, OnChanged);
+        return new DelegateUiBinding(subscription.Dispose);
     }
 
     /// <summary>

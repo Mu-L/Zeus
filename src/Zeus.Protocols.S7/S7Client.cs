@@ -8,10 +8,8 @@ public sealed class S7Client : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly S7Options _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
     private ushort _pduReference;
     private bool _sessionReady;
 
@@ -24,6 +22,8 @@ public sealed class S7Client : IAsyncDisposable
     public S7Client(IChannel channel, S7Options? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _options = CopyOptions(options ?? new S7Options());
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
         _channel.DataReceived += OnDataReceived;
@@ -151,7 +151,6 @@ public sealed class S7Client : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -174,9 +173,9 @@ public sealed class S7Client : IAsyncDisposable
         try
         {
             await EnsureSessionAsync(cancellationToken).ConfigureAwait(false);
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             var pdu = NextPduReference();
@@ -210,9 +209,9 @@ public sealed class S7Client : IAsyncDisposable
         try
         {
             await EnsureSessionAsync(cancellationToken).ConfigureAwait(false);
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             var pdu = NextPduReference();
@@ -239,9 +238,9 @@ public sealed class S7Client : IAsyncDisposable
             return;
         }
 
-        lock (_bufferLock)
+        lock (_receive.SyncRoot)
         {
-            _buffer.Clear();
+            _receive.Bytes.Clear();
         }
 
         await _channel.WriteAsync(S7Codec.EncodeConnectionRequest(_options), cancellationToken).ConfigureAwait(false);
@@ -251,9 +250,9 @@ public sealed class S7Client : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        lock (_bufferLock)
+        lock (_receive.SyncRoot)
         {
-            _buffer.Clear();
+            _receive.Bytes.Clear();
         }
 
         var pdu = NextPduReference();
@@ -275,11 +274,12 @@ public sealed class S7Client : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                while (S7Codec.TryReadTpktFrame(_buffer, out var frame, out var consumed))
+                while (S7Codec.TryReadTpktFrame(_receive.Bytes, out var frame, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     var result = decode(frame);
                     if (result.HasValue)
                     {
@@ -287,12 +287,12 @@ public sealed class S7Client : IAsyncDisposable
                     }
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -310,11 +310,12 @@ public sealed class S7Client : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                while (S7Codec.TryReadTpktFrame(_buffer, out var frame, out var consumed))
+                while (S7Codec.TryReadTpktFrame(_receive.Bytes, out var frame, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     var result = decode(frame);
                     if (result is not null)
                     {
@@ -322,12 +323,12 @@ public sealed class S7Client : IAsyncDisposable
                     }
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -349,36 +350,20 @@ public sealed class S7Client : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
                 _sessionReady = false;
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
+                _receive.CancelPendingLocked(new ZeusProtocolException(
                     $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 S7 请求已取消。"));
-                _dataPulse = null;
             }
         }
     }
-
     private static S7Options CopyOptions(S7Options source)
         => new()
         {

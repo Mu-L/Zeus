@@ -78,18 +78,17 @@ public sealed class Dlt645Tests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "meter-link", "type": "virtual", "responder": "dlt645", "meterAddress": "000000000001" }
+                { "name": "meter-link", "type": "virtual", "options": { "responder": "dlt645", "meterAddress": "000000000001" } }
               ],
               "devices": [
                 {
                   "name": "meter",
                   "channel": "meter-link",
                   "type": "dlt645",
-                  "meterAddress": "000000000001",
-                  "wakeUpPreambleCount": 0,
+                  "options": { "meterAddress": "000000000001", "wakeUpPreambleCount": 0 },
                   "points": [
-                    { "name": "energy", "address": "0x00000000", "dataType": "bcd", "dataLength": 4, "scale": 0.01 },
-                    { "name": "limit", "address": "0x04000101", "dataType": "bcd", "dataLength": 2, "scale": 0.1, "writable": true }
+                    { "name": "energy", "options": { "address": "0x00000000", "dataType": "bcd", "dataLength": 4, "scale": 0.01 } },
+                    { "name": "limit", "options": { "address": "0x04000101", "dataType": "bcd", "dataLength": 2, "scale": 0.1, "writable": true } }
                   ]
                 }
               ]

@@ -35,7 +35,7 @@ namespace Zeus
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         public System.Threading.Tasks.Task<byte[]> ExecuteCipAsync(byte service, System.ReadOnlyMemory<byte> path, System.ReadOnlyMemory<byte> data, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<byte[]> GetAttributeSingleAsync(ushort classId, uint instanceId, ushort attributeId, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<object> ReadTagAsync(string tagName, Zeus.EtherNetIpDataType dataType, ushort elementCount = 1, double? scale = default, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task SetAttributeSingleAsync(ushort classId, uint instanceId, ushort attributeId, System.ReadOnlyMemory<byte> data, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task WriteAsync(string pointName, object value, Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }

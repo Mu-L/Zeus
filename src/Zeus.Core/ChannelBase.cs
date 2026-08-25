@@ -33,6 +33,9 @@ public abstract class ChannelBase : IChannel
     public ChannelState State => (ChannelState)Volatile.Read(ref _state);
 
     /// <inheritdoc />
+    public ChannelStartupMode StartupMode { get; set; } = ChannelStartupMode.Required;
+
+    /// <inheritdoc />
     public event EventHandler<ChannelStateChangedEventArgs>? StateChanged;
 
     /// <inheritdoc />

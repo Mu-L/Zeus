@@ -58,8 +58,9 @@ public sealed class MqttDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
         => _client.PublishAsync(topic, Encoding.UTF8.GetBytes(payload ?? string.Empty), qualityOfService, retain, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         await ConnectAsync(cancellationToken).ConfigureAwait(false);
         _client.DrainMessages();
         foreach (var spec in _specs)
@@ -78,14 +79,16 @@ public sealed class MqttDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
 
             try
             {
-                table.Publish(qualified, DecodeValue(spec.DataType, payload));
+                results.Add(PointReadResult.Success(qualified, DecodeValue(spec.DataType, payload)));
             }
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(qualified, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

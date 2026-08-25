@@ -8,15 +8,15 @@ public sealed class Dlt645Client : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly Dlt645Options _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
 
     /// <summary>创建 DL/T 645 客户端并订阅通道。</summary>
     public Dlt645Client(IChannel channel, Dlt645Options? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _options = CopyOptions(options ?? new Dlt645Options());
         ValidateOptions(_options);
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -36,9 +36,9 @@ public sealed class Dlt645Client : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             await _channel.WriteAsync(
@@ -79,9 +79,9 @@ public sealed class Dlt645Client : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             await _channel.WriteAsync(
@@ -135,7 +135,6 @@ public sealed class Dlt645Client : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -148,20 +147,21 @@ public sealed class Dlt645Client : IAsyncDisposable
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
             Dlt645Frame? decoded = null;
-            lock (_bufferLock)
+            Task? dataPulse = null;
+            lock (_receive.SyncRoot)
             {
-                if (Dlt645Codec.TryDecodeFrame(_buffer, out var response, out var consumed))
+                if (Dlt645Codec.TryDecodeFrame(_receive.Bytes, out var response, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     decoded = response;
                 }
                 else if (consumed > 0)
                 {
-                    _buffer.RemoveRange(0, Math.Min(consumed, _buffer.Count));
+                    _receive.Bytes.RemoveRange(0, Math.Min(consumed, _receive.Bytes.Count));
                 }
                 else
                 {
-                    _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    dataPulse = _receive.WaitForDataLocked();
                 }
             }
 
@@ -170,14 +170,14 @@ public sealed class Dlt645Client : IAsyncDisposable
                 return found;
             }
 
-            if (_dataPulse is null)
+            if (dataPulse is null)
             {
                 continue;
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -208,35 +208,16 @@ public sealed class Dlt645Client : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
-            {
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
-                    $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 DL/T 645 请求已取消。"));
-                _dataPulse = null;
-            }
+            _receive.CancelPending(new ZeusProtocolException(
+                $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 DL/T 645 请求已取消。"));
         }
     }
-
     private static Dlt645Options CopyOptions(Dlt645Options source)
         => new()
         {

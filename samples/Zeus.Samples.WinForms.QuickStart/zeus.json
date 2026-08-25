@@ -8,9 +8,11 @@
     {
       "name": "bus",
       "type": "virtual",
-      "responder": "modbus",
-      "unitId": 1,
-      "transport": "rtu"
+      "options": {
+        "responder": "modbus",
+        "unitId": 1,
+        "transport": "rtu"
+      }
     }
   ],
   "devices": [
@@ -18,12 +20,39 @@
       "name": "oven",
       "channel": "bus",
       "type": "modbus-rtu",
-      "unitId": 1,
       "points": [
-        { "name": "temperature", "table": "holding", "address": 0, "scale": 0.1, "lowAlarmLimit": 10, "highAlarmLimit": 80 },
-        { "name": "setpoint", "table": "holding", "address": 1, "scale": 0.1, "writable": true },
-        { "name": "heater", "table": "coil", "address": 2, "writable": true }
-      ]
+        {
+          "name": "temperature",
+          "options": {
+            "table": "holding",
+            "address": 0,
+            "scale": 0.1,
+            "lowAlarmLimit": 10,
+            "highAlarmLimit": 80
+          }
+        },
+        {
+          "name": "setpoint",
+          "options": {
+            "table": "holding",
+            "address": 1,
+            "scale": 0.1,
+            "writable": true
+          }
+        },
+        {
+          "name": "heater",
+          "options": {
+            "table": "coil",
+            "address": 2,
+            "writable": true
+          }
+        }
+      ],
+      "options": {
+        "unitId": 1
+      }
     }
   ]
 }
+

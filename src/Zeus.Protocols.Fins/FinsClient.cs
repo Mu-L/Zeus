@@ -9,10 +9,8 @@ public sealed class FinsClient : IAsyncDisposable
     private readonly FinsTransport _transport;
     private readonly FinsOptions _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
     private byte _serviceId;
     private bool _tcpHandshakeReady;
 
@@ -22,6 +20,8 @@ public sealed class FinsClient : IAsyncDisposable
     public FinsClient(IChannel channel, FinsTransport transport, FinsOptions? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _transport = transport;
         _options = CopyOptions(options ?? new FinsOptions());
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -51,9 +51,9 @@ public sealed class FinsClient : IAsyncDisposable
                 await ExecuteTcpHandshakeAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             var sid = NextServiceId();
@@ -163,15 +163,14 @@ public sealed class FinsClient : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
     private async Task ExecuteTcpHandshakeAsync(CancellationToken cancellationToken)
     {
-        lock (_bufferLock)
+        lock (_receive.SyncRoot)
         {
-            _buffer.Clear();
+            _receive.Bytes.Clear();
         }
 
         await _channel.WriteAsync(FinsCodec.BuildTcpNodeAddressRequest(_options.TcpRequestedClientNode), cancellationToken).ConfigureAwait(false);
@@ -181,11 +180,12 @@ public sealed class FinsClient : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                if (FinsCodec.TryDecodeTcpPacket(_buffer, out var command, out var error, out var payload, out var consumed))
+                if (FinsCodec.TryDecodeTcpPacket(_receive.Bytes, out var command, out var error, out var payload, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     if (command is not (FinsCodec.TcpCommandNodeAddressDataSend or FinsCodec.TcpCommandNodeAddressDataSendResponse))
                     {
                         throw new ZeusProtocolException($"FINS/TCP 节点地址响应命令异常：0x{command:X8}。");
@@ -203,12 +203,12 @@ public sealed class FinsClient : IAsyncDisposable
                     return;
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -226,11 +226,12 @@ public sealed class FinsClient : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                if (FinsCodec.TryDecodeResponse(_buffer, _transport, out var response, out var consumed))
+                if (FinsCodec.TryDecodeResponse(_receive.Bytes, _transport, out var response, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     if (response.ServiceId != sid)
                     {
                         throw new ZeusProtocolException(
@@ -245,12 +246,12 @@ public sealed class FinsClient : IAsyncDisposable
                     return response;
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -272,36 +273,16 @@ public sealed class FinsClient : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
-            {
-                _tcpHandshakeReady = false;
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
-                    $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 FINS 请求已取消。"));
-                _dataPulse = null;
-            }
+            _receive.CancelPending(new ZeusProtocolException(
+                $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 FINS 请求已取消。"));
         }
     }
-
     private static FinsOptions CopyOptions(FinsOptions source)
         => new()
         {

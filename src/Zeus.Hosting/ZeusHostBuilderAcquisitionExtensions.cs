@@ -66,6 +66,21 @@ public static class ZeusHostBuilderAcquisitionExtensions
             throw new ZeusException("自动重连的退避系数必须大于或等于 1。");
         }
 
+        if (builder.Reconnect.MaxAttempts < 0)
+        {
+            throw new ZeusException("自动重连的最大次数不能为负数。0 表示不限制。");
+        }
+
+        if (builder.Reconnect.JitterRatio < 0 || !double.IsFinite(builder.Reconnect.JitterRatio))
+        {
+            throw new ZeusException("自动重连的抖动比例必须是大于或等于 0 的有限数值。");
+        }
+
+        if (builder.Reconnect.CircuitBreakDuration < TimeSpan.Zero)
+        {
+            throw new ZeusException("自动重连的熔断等待不能为负数。");
+        }
+
         return builder;
     }
 

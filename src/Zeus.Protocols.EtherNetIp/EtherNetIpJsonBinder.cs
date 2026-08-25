@@ -12,9 +12,9 @@ public sealed class EtherNetIpJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
     }
 
@@ -37,20 +37,21 @@ public sealed class EtherNetIpJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "ethernet-ip" ? new EtherNetIpSlaveResponder() : null;
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "ethernet-ip" ? new EtherNetIpSlaveResponder() : null;
 
     /// <inheritdoc />
-    public string DeviceFingerprint(DeviceConfiguration device) => device.TimeoutMilliseconds?.ToString() ?? "";
+    public string DeviceFingerprint(DeviceConfiguration device) => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static Action<EtherNetIpPointMap>? Points(DeviceConfiguration device)
         => device.Points.Count == 0 ? null : map =>
         {
             foreach (var point in device.Points)
             {
-                var dataType = ZeusConfigurationText.Normalize(point.DataType) switch
+                var dataTypeValue = ZeusConfigurationOptions.GetString(point.Options, "dataType", "int");
+                var dataType = ZeusConfigurationText.Normalize(dataTypeValue) switch
                 {
                     "bool" => EtherNetIpDataType.Bool,
                     "sint" => EtherNetIpDataType.SInt,
@@ -63,11 +64,12 @@ public sealed class EtherNetIpJsonBinder : IZeusJsonBinder
                     "ulint" => EtherNetIpDataType.ULInt,
                     "real" => EtherNetIpDataType.Real,
                     "lreal" => EtherNetIpDataType.LReal,
-                    _ => throw new ZeusException($"EtherNet/IP dataType「{point.DataType}」不受支持。")
+                    _ => throw new ZeusException($"EtherNet/IP dataType「{dataTypeValue}」不受支持。")
                 };
-                var tag = string.IsNullOrWhiteSpace(point.Tag) ? point.Name : point.Tag.Trim();
-                map.Tag(point.Name, tag, dataType, point.Scale, ZeusConfigurationText.CreateAlarmLimits(point));
-                if (point.Writable)
+                var tag = ZeusConfigurationOptions.GetString(point.Options, "tag");
+                tag = string.IsNullOrWhiteSpace(tag) ? point.Name : tag.Trim();
+                map.Tag(point.Name, tag, dataType, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), ZeusConfigurationText.CreateAlarmLimits(point));
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }

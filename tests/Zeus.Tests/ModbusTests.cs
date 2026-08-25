@@ -97,14 +97,14 @@ public sealed class ModbusTests
         const string json = """
             {
               "channels": [
-                { "name": "ascii", "type": "virtual", "responder": "modbus", "unitId": 1, "transport": "ascii" }
+                { "name": "ascii", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "ascii" } }
               ],
               "devices": [
                 {
                   "name": "meter",
                   "channel": "ascii",
                   "type": "modbus-ascii",
-                  "unitId": 1
+                  "options": { "unitId": 1 }
                 }
               ]
             }

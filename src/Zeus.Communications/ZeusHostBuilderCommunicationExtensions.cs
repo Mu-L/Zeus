@@ -252,12 +252,13 @@ public static class ZeusHostBuilderCommunicationExtensions
         string name,
         string portName,
         int baudRate = 115200,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
         => host.AddSerialPortAsync(name, options =>
         {
             options.PortName = portName;
             options.BaudRate = baudRate;
-        }, cancellationToken);
+        }, cancellationToken, startupMode);
 
     /// <summary>
     /// 以选项回调在已构建的宿主上登记串口通道。
@@ -266,13 +267,14 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         Action<SerialPortOptions> configure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var options = new SerialPortOptions();
         configure(options);
         var logger = host.Services.GetService<ILogger<SerialPortChannel>>();
-        return AddAndMaybeOpenAsync(host, new SerialPortChannel(name, options, logger), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new SerialPortChannel(name, options, logger), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -282,10 +284,11 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         IVirtualResponder? responder = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         var logger = host.Services.GetService<ILogger<VirtualChannel>>();
-        return AddAndMaybeOpenAsync(host, new VirtualChannel(name, logger, responder), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new VirtualChannel(name, logger, responder), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -296,12 +299,13 @@ public static class ZeusHostBuilderCommunicationExtensions
         string name,
         string hostName,
         int port,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
         => host.AddTcpClientAsync(name, options =>
         {
             options.Host = hostName;
             options.Port = port;
-        }, cancellationToken);
+        }, cancellationToken, startupMode);
 
     /// <summary>
     /// 以选项回调在已构建的宿主上登记 TCP 客户端通道。
@@ -310,13 +314,14 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         Action<TcpClientOptions> configure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var options = new TcpClientOptions();
         configure(options);
         var logger = host.Services.GetService<ILogger<TcpClientChannel>>();
-        return AddAndMaybeOpenAsync(host, new TcpClientChannel(name, options, logger), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new TcpClientChannel(name, options, logger), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -326,8 +331,9 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         int localPort,
-        CancellationToken cancellationToken = default)
-        => host.AddTcpServerAsync(name, options => options.LocalPort = localPort, cancellationToken);
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
+        => host.AddTcpServerAsync(name, options => options.LocalPort = localPort, cancellationToken, startupMode);
 
     /// <summary>
     /// 以选项回调在已构建的宿主上登记 TCP 服务端通道。
@@ -336,13 +342,14 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         Action<TcpServerOptions> configure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var options = new TcpServerOptions();
         configure(options);
         var logger = host.Services.GetService<ILogger<TcpServerChannel>>();
-        return AddAndMaybeOpenAsync(host, new TcpServerChannel(name, options, logger), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new TcpServerChannel(name, options, logger), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -353,12 +360,13 @@ public static class ZeusHostBuilderCommunicationExtensions
         string name,
         string hostName,
         int port,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
         => host.AddUdpClientAsync(name, options =>
         {
             options.Host = hostName;
             options.Port = port;
-        }, cancellationToken);
+        }, cancellationToken, startupMode);
 
     /// <summary>
     /// 以选项回调在已构建的宿主上登记 UDP 客户端通道。
@@ -367,13 +375,14 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         Action<UdpClientOptions> configure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var options = new UdpClientOptions();
         configure(options);
         var logger = host.Services.GetService<ILogger<UdpClientChannel>>();
-        return AddAndMaybeOpenAsync(host, new UdpClientChannel(name, options, logger), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new UdpClientChannel(name, options, logger), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -383,8 +392,9 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         int localPort,
-        CancellationToken cancellationToken = default)
-        => host.AddUdpServerAsync(name, options => options.LocalPort = localPort, cancellationToken);
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
+        => host.AddUdpServerAsync(name, options => options.LocalPort = localPort, cancellationToken, startupMode);
 
     /// <summary>
     /// 以选项回调在已构建的宿主上登记 UDP 服务端通道。
@@ -393,13 +403,14 @@ public static class ZeusHostBuilderCommunicationExtensions
         this IZeusHost host,
         string name,
         Action<UdpServerOptions> configure,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ChannelStartupMode startupMode = ChannelStartupMode.Required)
     {
         ArgumentNullException.ThrowIfNull(configure);
         var options = new UdpServerOptions();
         configure(options);
         var logger = host.Services.GetService<ILogger<UdpServerChannel>>();
-        return AddAndMaybeOpenAsync(host, new UdpServerChannel(name, options, logger), cancellationToken);
+        return AddAndMaybeOpenAsync(host, new UdpServerChannel(name, options, logger), cancellationToken, startupMode);
     }
 
     /// <summary>
@@ -408,10 +419,12 @@ public static class ZeusHostBuilderCommunicationExtensions
     private static async Task<TChannel> AddAndMaybeOpenAsync<TChannel>(
         IZeusHost host,
         TChannel channel,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChannelStartupMode startupMode)
         where TChannel : IChannel
     {
         ArgumentNullException.ThrowIfNull(host);
+        channel.StartupMode = startupMode;
         host.Channels.Add(channel);
         if (!host.IsRunning)
         {
@@ -424,7 +437,21 @@ public static class ZeusHostBuilderCommunicationExtensions
         }
         catch (Exception)
         {
-            // 打开失败已进入 Faulted；自动重连服务会按退避重试。
+            if (channel.StartupMode == ChannelStartupMode.Required)
+            {
+                try
+                {
+                    await host.Channels.RemoveAsync(channel.Name, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    await channel.DisposeAsync().ConfigureAwait(false);
+                }
+
+                throw;
+            }
+
+            // 可选/降级通道打开失败已进入 Faulted；自动重连服务会按退避重试。
             // 调用方仍拿到通道实例，可通过 State 判断是否需要立即处理。
         }
 

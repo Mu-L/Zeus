@@ -33,7 +33,7 @@ namespace Zeus
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         public System.Threading.Tasks.Task<byte[]> ExecuteAsync(ushort command, System.ReadOnlyMemory<byte> data, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task FillWordsAsync(Zeus.FinsMemoryAreaCode area, ushort address, ushort count, ushort value, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool[]> ReadBitsAsync(Zeus.FinsMemoryAreaCode area, ushort address, byte bitOffset, ushort count, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool[]> ReadCioBitsAsync(ushort address, byte bitOffset, ushort count, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<ushort[]> ReadDataMemoryWordsAsync(ushort address, ushort count, System.Threading.CancellationToken cancellationToken = default) { }

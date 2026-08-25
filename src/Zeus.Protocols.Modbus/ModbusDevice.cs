@@ -161,13 +161,14 @@ public sealed class ModbusDevice : DeviceBase, IAcquisitionSource, IPointWriter,
     }
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var group in GroupConsecutive(_specs))
         {
             try
             {
-                await PublishGroupAsync(table, group, cancellationToken).ConfigureAwait(false);
+                await ReadGroupAsync(results, group, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -178,17 +179,19 @@ public sealed class ModbusDevice : DeviceBase, IAcquisitionSource, IPointWriter,
                 LogAcquisitionFailed(ex, group[0].Name);
                 foreach (var spec in group)
                 {
-                    table.PublishError(Name + "." + spec.Name, ex.Message);
+                    results.Add(PointReadResult.Failure(Name + "." + spec.Name, ex.Message));
                 }
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _client.DisposeAsync();
 
-    private async Task PublishGroupAsync(
-        IPointTableWriter table,
+    private async Task ReadGroupAsync(
+        List<PointReadResult> results,
         IReadOnlyList<ModbusPointSpec> group,
         CancellationToken cancellationToken)
     {
@@ -202,7 +205,7 @@ public sealed class ModbusDevice : DeviceBase, IAcquisitionSource, IPointWriter,
             foreach (var spec in group)
             {
                 var raw = values[spec.Address - first.Address];
-                table.Publish(Name + "." + spec.Name, spec.Convert is null ? raw : spec.Convert(raw));
+                results.Add(PointReadResult.Success(Name + "." + spec.Name, spec.Convert is null ? raw : spec.Convert(raw)));
             }
 
             return;
@@ -213,7 +216,7 @@ public sealed class ModbusDevice : DeviceBase, IAcquisitionSource, IPointWriter,
             : await ReadDiscreteInputsAsync(first.Address, quantity, cancellationToken).ConfigureAwait(false);
         foreach (var spec in group)
         {
-            table.Publish(Name + "." + spec.Name, bits[spec.Address - first.Address]);
+            results.Add(PointReadResult.Success(Name + "." + spec.Name, bits[spec.Address - first.Address]));
         }
     }
 

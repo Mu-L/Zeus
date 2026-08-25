@@ -53,15 +53,16 @@ public sealed class Dlt645Device : DeviceBase, IAcquisitionSource, IPointWriter,
         => _client.WriteBcdAsync(dataIdentifier, value, byteLength, scale, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var spec in _specs)
         {
             var qualified = Name + "." + spec.Name;
             try
             {
                 var data = await ReadDataAsync(spec.DataIdentifier, cancellationToken).ConfigureAwait(false);
-                table.Publish(qualified, DecodeSpec(spec, data));
+                results.Add(PointReadResult.Success(qualified, DecodeSpec(spec, data)));
             }
             catch (OperationCanceledException)
             {
@@ -70,9 +71,11 @@ public sealed class Dlt645Device : DeviceBase, IAcquisitionSource, IPointWriter,
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(qualified, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

@@ -58,8 +58,9 @@ public sealed class Iec104Device : DeviceBase, IAcquisitionSource, IPointWriter,
         => _client.SendShortFloatSetpointAsync(address, value, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         var values = await InterrogateAsync(cancellationToken).ConfigureAwait(false);
         foreach (var spec in _specs)
         {
@@ -72,7 +73,7 @@ public sealed class Iec104Device : DeviceBase, IAcquisitionSource, IPointWriter,
                     throw new ZeusProtocolException($"IEC104 总召唤未返回 IOA {spec.Address} 的 {spec.DataType} 值。");
                 }
 
-                table.Publish(qualified, DecodeSpec(spec, value.Value));
+                results.Add(PointReadResult.Success(qualified, DecodeSpec(spec, value.Value)));
             }
             catch (OperationCanceledException)
             {
@@ -81,9 +82,11 @@ public sealed class Iec104Device : DeviceBase, IAcquisitionSource, IPointWriter,
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(qualified, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

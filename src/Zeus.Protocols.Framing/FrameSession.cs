@@ -2,14 +2,14 @@ namespace Zeus;
 
 /// <summary>
 /// 在一条通道上做请求-响应。串行发送，用超时等待下一帧完整应答；半包与粘包由编解码器消化。
-/// 同一会话请勿并发调用请求方法，多设备共享通道时应自行排队。
+/// 同一物理通道上的会话共享事务协调器，避免多设备并发抢帧。
 /// </summary>
 public sealed class FrameSession : IAsyncDisposable
 {
     private readonly IChannel _channel;
     private readonly IFrameCodec _codec;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ChannelTransactionCoordinator _gate;
     private readonly object _inboxLock = new();
     private readonly List<byte[]> _inbox = [];
     private const int MaxInboxFrames = 64;
@@ -24,6 +24,7 @@ public sealed class FrameSession : IAsyncDisposable
     public FrameSession(IChannel channel, IFrameCodec codec, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
         _codec = codec ?? throw new ArgumentNullException(nameof(codec));
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
         _channel.DataReceived += OnDataReceived;
@@ -139,7 +140,6 @@ public sealed class FrameSession : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 

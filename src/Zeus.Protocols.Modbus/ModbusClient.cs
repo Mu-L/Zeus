@@ -8,11 +8,9 @@ public sealed class ModbusClient : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly ModbusTransport _transport;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
     private ushort _transactionId;
-    private TaskCompletionSource<bool>? _dataPulse;
 
     /// <summary>
     /// 创建客户端并订阅通道。
@@ -23,6 +21,8 @@ public sealed class ModbusClient : IAsyncDisposable
     public ModbusClient(IChannel channel, ModbusTransport transport, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _transport = transport;
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
         _channel.DataReceived += OnDataReceived;
@@ -46,9 +46,9 @@ public sealed class ModbusClient : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             var transactionId = NextTransactionId();
@@ -61,18 +61,19 @@ public sealed class ModbusClient : IAsyncDisposable
             while (true)
             {
                 timeoutCts.Token.ThrowIfCancellationRequested();
-                lock (_bufferLock)
+                Task dataPulse;
+                lock (_receive.SyncRoot)
                 {
                     if (ModbusCodec.TryDecodeResponse(
                             _transport,
-                            _buffer,
+                            _receive.Bytes,
                             requestPdu.Span,
                             transactionId,
                             out var responseUnit,
                             out var pdu,
                             out var consumed))
                     {
-                        _buffer.RemoveRange(0, consumed);
+                        _receive.Bytes.RemoveRange(0, consumed);
                         if (responseUnit != unitId)
                         {
                             throw new ZeusProtocolException(
@@ -82,12 +83,12 @@ public sealed class ModbusClient : IAsyncDisposable
                         return UnwrapPdu(unitId, requestPdu.Span[0], pdu);
                     }
 
-                    _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    dataPulse = _receive.WaitForDataLocked();
                 }
 
                 try
                 {
-                    await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                    await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -446,7 +447,6 @@ public sealed class ModbusClient : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -552,32 +552,14 @@ public sealed class ModbusClient : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
-            {
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
-                    $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 Modbus 请求已取消。"));
-                _dataPulse = null;
-            }
+            _receive.CancelPending(new ZeusProtocolException(
+                $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 Modbus 请求已取消。"));
         }
     }
 }

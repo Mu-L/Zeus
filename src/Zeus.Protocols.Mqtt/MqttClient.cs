@@ -6,7 +6,7 @@ public sealed class MqttClient : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly MqttOptions _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ChannelTransactionCoordinator _gate;
     private readonly object _bufferLock = new();
     private readonly List<byte> _buffer = [];
     private readonly Queue<MqttMessage> _messages = [];
@@ -29,6 +29,7 @@ public sealed class MqttClient : IAsyncDisposable
     public MqttClient(IChannel channel, MqttOptions? options = null, TimeSpan? timeout = null, string? fallbackClientId = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
         _options = CopyOptions(options ?? new MqttOptions());
         MqttCodec.ValidateOptions(_options);
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -323,7 +324,6 @@ public sealed class MqttClient : IAsyncDisposable
             try { await keepAlive.ConfigureAwait(false); } catch (OperationCanceledException) { }
         }
 
-        _gate.Dispose();
         _keepAliveCts?.Dispose();
         _reconnectCts?.Dispose();
     }

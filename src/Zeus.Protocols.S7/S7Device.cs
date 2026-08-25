@@ -117,10 +117,12 @@ public sealed class S7Device : DeviceBase, IAcquisitionSource, IPointWriter, IAs
         => _client.WriteRealAsync(area, byteOffset, value, dbNumber, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var spec in _specs)
         {
+            var qualified = Name + "." + spec.Name;
             try
             {
                 var raw = await _client.ReadAreaAsync(
@@ -132,7 +134,7 @@ public sealed class S7Device : DeviceBase, IAcquisitionSource, IPointWriter, IAs
                         spec.ByteLength,
                         cancellationToken)
                     .ConfigureAwait(false);
-                table.Publish(Name + "." + spec.Name, S7Codec.DecodeValue(spec.DataType, raw, spec.Scale));
+                results.Add(PointReadResult.Success(qualified, S7Codec.DecodeValue(spec.DataType, raw, spec.Scale)));
             }
             catch (OperationCanceledException)
             {
@@ -141,9 +143,11 @@ public sealed class S7Device : DeviceBase, IAcquisitionSource, IPointWriter, IAs
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(Name + "." + spec.Name, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

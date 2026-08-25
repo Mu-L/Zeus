@@ -12,22 +12,25 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.UnitId > 31)
+        var unitId = ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1, path);
+        if (unitId is < 0 or > 31)
         {
-            throw new ZeusException($"{path}.unitId 必须介于 0 与 31 之间。");
+            throw new ZeusException($"{path}.options.unitId 必须介于 0 与 31 之间。");
         }
 
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
-        foreach (var point in device.Points)
+        for (var i = 0; i < device.Points.Count; i++)
         {
-            ZeusConfigurationText.EnsureName(point.Name, path);
-            if (string.IsNullOrWhiteSpace(point.Area))
+            var point = device.Points[i];
+            var pointPath = $"{path}.points[{i}]";
+            ZeusConfigurationText.EnsureName(point.Name, pointPath);
+            if (string.IsNullOrWhiteSpace(ZeusConfigurationOptions.GetString(point.Options, "area", path: pointPath)))
             {
-                throw new ZeusException($"点 {point.Name}.area 必须指定。");
+                throw new ZeusException($"{pointPath}.options.area 必须指定。");
             }
         }
     }
@@ -35,9 +38,10 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
-        if (channel.UnitId > 31)
+        var unitId = ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1, path);
+        if (unitId is < 0 or > 31)
         {
-            throw new ZeusException($"{path}.unitId 必须介于 0 与 31 之间。");
+            throw new ZeusException($"{path}.options.unitId 必须介于 0 与 31 之间。");
         }
     }
 
@@ -55,22 +59,22 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "host-link"
-            ? new HostLinkSlaveResponder(channel.UnitId)
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "host-link"
+            ? new HostLinkSlaveResponder((byte)ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1))
             : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.UnitId, device.TimeoutMilliseconds, ZeusConfigurationText.Normalize(device.WordOrder));
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static HostLinkOptions Options(DeviceConfiguration device)
         => new()
         {
-            UnitNumber = device.UnitId,
-            WordOrder = ZeusConfigurationText.Normalize(device.WordOrder) == "low-word-first"
+            UnitNumber = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1),
+            WordOrder = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first")) == "low-word-first"
                 ? HostLinkWordOrder.LowWordFirst
                 : HostLinkWordOrder.HighWordFirst
         };
@@ -80,22 +84,25 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var area = ParseArea(point.Area);
-                var dataType = ZeusConfigurationText.Normalize(point.DataType);
+                var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"));
+                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
+                var address = (ushort)ZeusConfigurationOptions.GetInt32(point.Options, "address");
+                var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+                var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 if (dataType is "bit")
                 {
-                    map.Bit(point.Name, area, (ushort)point.Address, (byte)point.BitOffset);
+                    map.Bit(point.Name, area, address, bitOffset);
                 }
-                else if (point.Scale is { } scale)
+                else if (scale is { } wordScale)
                 {
-                    map.Word(point.Name, area, (ushort)point.Address, scale);
+                    map.Word(point.Name, area, address, wordScale);
                 }
                 else
                 {
-                    map.Word(point.Name, area, (ushort)point.Address);
+                    map.Word(point.Name, area, address);
                 }
 
-                if (point.Writable)
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }

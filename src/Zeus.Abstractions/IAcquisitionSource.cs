@@ -13,10 +13,9 @@ public interface IAcquisitionSource
     IReadOnlyList<PointDefinition> Points { get; }
 
     /// <summary>
-    /// 执行一轮采集并把结果写入 <paramref name="table"/>。
-    /// 实现应自行消化协议细节（例如把连续寄存器合并为一次读取）。
+    /// 执行一轮采集并返回结果，由宿主统一发布到点表。
+    /// 实现应自行消化协议细节（例如把连续寄存器合并为一次读取），但不直接写点表。
     /// </summary>
-    /// <param name="table">点表写入器。</param>
     /// <param name="cancellationToken">取消本轮采集。</param>
-    Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default);
 }

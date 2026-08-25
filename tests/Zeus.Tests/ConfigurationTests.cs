@@ -14,18 +14,18 @@ public sealed class ConfigurationTests
         {
           "acquisition": { "intervalMilliseconds": 200, "pollImmediately": true },
           "channels": [
-            { "name": "bus", "type": "virtual", "responder": "modbus", "unitId": 1, "transport": "rtu" }
+            { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "rtu" } }
           ],
           "devices": [
             {
               "name": "oven",
               "channel": "bus",
               "type": "modbus-rtu",
-              "unitId": 1,
+              "options": { "unitId": 1 },
                 "points": [
-                { "name": "temperature", "table": "holding", "address": 0, "scale": 0.1, "lowAlarmLimit": 10, "highAlarmLimit": 80 },
-                { "name": "setpoint", "table": "holding", "address": 1, "scale": 0.1, "writable": true },
-                { "name": "heater", "table": "coil", "address": 2, "writable": true }
+                { "name": "temperature", "options": { "table": "holding", "address": 0, "scale": 0.1, "lowAlarmLimit": 10, "highAlarmLimit": 80 } },
+                { "name": "setpoint", "options": { "table": "holding", "address": 1, "scale": 0.1, "writable": true } },
+                { "name": "heater", "options": { "table": "coil", "address": 2, "writable": true } }
               ]
             }
           ]
@@ -82,7 +82,7 @@ public sealed class ConfigurationTests
                   "channel": "bus",
                   "type": "modbus-rtu",
                   "points": [
-                    { "name": "status", "table": "input", "address": 0, "writable": true }
+                    { "name": "status", "options": { "table": "input", "address": 0, "writable": true } }
                   ]
                 }
               ]
@@ -108,7 +108,7 @@ public sealed class ConfigurationTests
                   "channel": "bus",
                   "type": "modbus-rtu",
                   "points": [
-                    { "name": "temperature", "table": "holding", "address": 0, "lowAlarmLimit": 90, "highAlarmLimit": 80 }
+                    { "name": "temperature", "options": { "table": "holding", "address": 0, "lowAlarmLimit": 90, "highAlarmLimit": 80 } }
                   ]
                 }
               ]
@@ -199,6 +199,214 @@ public sealed class ConfigurationTests
         AssertSchemaRequiresChannelField(channelRules, "udp", "port");
         AssertSchemaRequiresChannelField(channelRules, "tcp-server", "localPort");
         AssertSchemaRequiresChannelField(channelRules, "udp-server", "localPort");
+
+        var channel = schema.RootElement.GetProperty("$defs").GetProperty("channel").GetProperty("properties");
+        Assert.False(channel.TryGetProperty("host", out _));
+        Assert.False(channel.TryGetProperty("portName", out _));
+    }
+
+    /// <summary>
+    /// Schema 应暴露启动策略、重连韧性参数和扩展 options，避免编辑器仍按旧配置提示。
+    /// </summary>
+    [Fact]
+    public void Schema_ExposesStartupReconnectAndExtensionOptions()
+    {
+        var schemaPath = FindRepositoryFile("src", "Zeus.Configuration", "Schemas", "zeus.schema.json");
+        using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
+        var defs = schema.RootElement.GetProperty("$defs");
+
+        var reconnect = defs.GetProperty("reconnect").GetProperty("properties");
+        Assert.True(reconnect.TryGetProperty("maxAttempts", out _));
+        Assert.True(reconnect.TryGetProperty("jitterRatio", out _));
+        Assert.True(reconnect.TryGetProperty("circuitBreakMilliseconds", out _));
+
+        var channel = defs.GetProperty("channel").GetProperty("properties");
+        AssertSchemaEnumContains(channel.GetProperty("startup"), "required");
+        AssertSchemaEnumContains(channel.GetProperty("startup"), "optional");
+        AssertSchemaEnumContains(channel.GetProperty("startup"), "degraded");
+        Assert.True(channel.TryGetProperty("options", out _));
+
+        Assert.True(defs.GetProperty("device").GetProperty("properties").TryGetProperty("options", out _));
+        Assert.True(defs.GetProperty("point").GetProperty("properties").TryGetProperty("options", out _));
+    }
+
+    /// <summary>
+    /// JSON 配置应能读取通道启动策略、重连韧性参数和扩展 options。
+    /// </summary>
+    [Fact]
+    public void LoadJson_ParsesStartupReconnectAndOptions()
+    {
+        const string json = """
+            {
+              "reconnect": {
+                "enabled": true,
+                "initialDelayMilliseconds": 250,
+                "maxDelayMilliseconds": 2000,
+                "backoffMultiplier": 1.5,
+                "maxAttempts": 3,
+                "jitterRatio": 0.25,
+                "circuitBreakMilliseconds": 5000
+              },
+              "channels": [
+                { "name": "bus", "type": "virtual", "startup": "optional", "options": { "driver": "primary", "retry": 2 } }
+              ],
+              "devices": [
+                {
+                  "name": "oven",
+                  "channel": "bus",
+                  "type": "modbus-rtu",
+                  "options": { "profile": "fast" },
+                  "points": [
+                    { "name": "temperature", "options": { "address": 0, "span": 16 } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var document = ZeusConfigurationLoader.LoadJson(json, "扩展配置");
+
+        Assert.Equal(3, document.Reconnect.MaxAttempts);
+        Assert.Equal(0.25, document.Reconnect.JitterRatio);
+        Assert.Equal(5000, document.Reconnect.CircuitBreakMilliseconds);
+        Assert.Equal("optional", document.Channels[0].Startup);
+        Assert.Equal("primary", document.Channels[0].Options["driver"].GetString());
+        Assert.Equal(2, document.Channels[0].Options["retry"].GetInt32());
+        Assert.Equal("fast", document.Devices[0].Options["profile"].GetString());
+        Assert.Equal(16, document.Devices[0].Points[0].Options["span"].GetInt32());
+    }
+
+    /// <summary>
+    /// 协议专属字段只从 options 读取，配置模型不再兼容旧顶层字段。
+    /// </summary>
+    [Fact]
+    public void LoadJson_UsesProtocolFieldsFromOptions()
+    {
+        const string json = """
+            {
+              "channels": [
+                {
+                  "name": "bus",
+                  "type": "virtual",
+                  "options": { "responder": "modbus", "unitId": 2, "transport": "tcp" }
+                }
+              ],
+              "devices": [
+                {
+                  "name": "oven",
+                  "channel": "bus",
+                  "type": "modbus-tcp",
+                  "options": { "unitId": 2, "timeoutMilliseconds": 1500 },
+                  "points": [
+                    {
+                      "name": "temperature",
+                      "options": { "table": "holding", "address": "0x10", "scale": 0.1, "writable": true }
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var document = ZeusConfigurationLoader.LoadJson(json, "options 配置");
+
+        Assert.Equal("modbus", ZeusConfigurationOptions.GetString(document.Channels[0].Options, "responder"));
+        Assert.Equal(2, ZeusConfigurationOptions.GetInt32(document.Channels[0].Options, "unitId"));
+        Assert.Equal("tcp", ZeusConfigurationOptions.GetString(document.Channels[0].Options, "transport"));
+        Assert.Equal(2, ZeusConfigurationOptions.GetInt32(document.Devices[0].Options, "unitId"));
+        Assert.Equal(1500, ZeusConfigurationOptions.GetInt32(document.Devices[0].Options, "timeoutMilliseconds"));
+        Assert.Equal("holding", ZeusConfigurationOptions.GetString(document.Devices[0].Points[0].Options, "table"));
+        Assert.Equal(0x10, ZeusConfigurationOptions.GetInt32(document.Devices[0].Points[0].Options, "address"));
+        Assert.Equal(0.1, ZeusConfigurationOptions.GetNullableDouble(document.Devices[0].Points[0].Options, "scale"));
+        Assert.True(ZeusConfigurationOptions.GetBoolean(document.Devices[0].Points[0].Options, "writable"));
+    }
+
+    /// <summary>
+    /// 旧版顶层协议字段必须失败，避免配置模型继续隐式兼容历史格式。
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        {
+          "channels": [ { "name": "bus", "type": "virtual", "responder": "modbus" } ]
+        }
+        """, "responder")]
+    [InlineData("""
+        {
+          "channels": [ { "name": "bus", "type": "virtual" } ],
+          "devices": [ { "name": "oven", "channel": "bus", "type": "modbus-rtu", "unitId": 1 } ]
+        }
+        """, "unitId")]
+    [InlineData("""
+        {
+          "channels": [ { "name": "bus", "type": "virtual" } ],
+          "devices": [
+            {
+              "name": "oven",
+              "channel": "bus",
+              "type": "modbus-rtu",
+              "points": [ { "name": "temperature", "address": 0 } ]
+            }
+          ]
+        }
+        """, "address")]
+    public void LoadJson_RejectsLegacyTopLevelProtocolFields(string json, string fieldName)
+    {
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "旧配置"));
+        Assert.Contains(fieldName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 重连韧性参数必须在装载期失败，而不是等到后台线程运行时才暴露错误。
+    /// </summary>
+    [Theory]
+    [InlineData("\"maxAttempts\": -1", "maxAttempts")]
+    [InlineData("\"jitterRatio\": -0.1", "jitterRatio")]
+    [InlineData("\"circuitBreakMilliseconds\": -1", "circuitBreakMilliseconds")]
+    public void InvalidReconnectPolicy_FailsAtLoad(string reconnectBody, string fieldName)
+    {
+        var json = $$"""
+            {
+              "reconnect": { {{reconnectBody}} }
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "坏重连配置"));
+        Assert.Contains(fieldName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 通道启动策略只接受明确值。
+    /// </summary>
+    [Fact]
+    public void InvalidChannelStartup_FailsAtLoad()
+    {
+        const string json = """
+            {
+              "channels": [ { "name": "bus", "type": "virtual", "startup": "ignore-failure" } ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "坏启动策略"));
+        Assert.Contains("startup", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 自定义 JSON 绑定应按宿主隔离登记，避免被静态白名单挡住。
+    /// </summary>
+    [Fact]
+    public async Task AddJsonBinder_AllowsHostScopedCustomResponder()
+    {
+        const string json = """
+            {
+              "channels": [ { "name": "loop", "type": "virtual", "options": { "responder": "custom-loop" } } ]
+            }
+            """;
+
+        await using var host = ZeusHost.Create(builder => builder
+            .AddJsonBinder(new CustomJsonBinder())
+            .AddJson(json, "自定义绑定配置"));
+
+        Assert.NotNull(host.Channels.Get("loop"));
     }
 
     /// <summary>
@@ -210,7 +418,7 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "channels": [
-                { "name": "wireless", "type": "udp", "host": "127.0.0.1", "port": 1502, "localPort": 0 }
+                { "name": "wireless", "type": "udp", "options": { "host": "127.0.0.1", "port": 1502, "localPort": 0 } }
               ]
             }
             """;
@@ -228,7 +436,7 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "channels": [
-                { "name": "listener", "type": "udp-server", "localAddress": "127.0.0.1", "localPort": 0 }
+                { "name": "listener", "type": "udp-server", "options": { "localAddress": "127.0.0.1", "localPort": 0 } }
               ]
             }
             """;
@@ -246,7 +454,7 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "channels": [
-                { "name": "listener", "type": "tcp-server", "localAddress": "127.0.0.1", "localPort": 0 }
+                { "name": "listener", "type": "tcp-server", "options": { "localAddress": "127.0.0.1", "localPort": 0 } }
               ]
             }
             """;
@@ -264,7 +472,7 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "channels": [
-                { "name": "plc-link", "type": "virtual", "responder": "mc" }
+                { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } }
               ],
               "devices": [
                 { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc" }
@@ -292,21 +500,23 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "channels": [
-                { "name": "plc-link", "type": "virtual", "responder": "mc" }
+                { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } }
               ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "frameType": "4e",
-                  "encoding": "ascii",
-                  "serialNumber": 4660,
-                  "networkNumber": 0,
-                  "pcNumber": 255,
-                  "ioNumber": 1023,
-                  "stationNumber": 0,
-                  "monitoringTimer": 16
+                  "options": {
+                    "frameType": "4e",
+                    "encoding": "ascii",
+                    "serialNumber": 4660,
+                    "networkNumber": 0,
+                    "pcNumber": 255,
+                    "ioNumber": 1023,
+                    "stationNumber": 0,
+                    "monitoringTimer": 16
+                  }
                 }
               ]
             }
@@ -332,9 +542,9 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
-                { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc", "frameType": "5e" }
+                { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc", "options": { "frameType": "5e" } }
               ]
             }
             """;
@@ -353,9 +563,9 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
-                { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc", "encoding": "utf8" }
+                { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc", "options": { "encoding": "utf8" } }
               ]
             }
             """;
@@ -375,16 +585,16 @@ public sealed class ConfigurationTests
         const string json = """
             {
               "acquisition": { "intervalMilliseconds": 80, "pollImmediately": true },
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
                   "points": [
-                    { "name": "temperature", "deviceCode": "D", "address": 100, "scale": 0.1, "lowAlarmLimit": 1, "highAlarmLimit": 80, "writable": true },
-                    { "name": "run", "deviceCode": "M", "address": 10, "writable": true },
-                    { "name": "ready", "deviceCode": "X", "address": "0x10" }
+                    { "name": "temperature", "options": { "deviceCode": "D", "address": 100, "scale": 0.1, "lowAlarmLimit": 1, "highAlarmLimit": 80, "writable": true } },
+                    { "name": "run", "options": { "deviceCode": "M", "address": 10, "writable": true } },
+                    { "name": "ready", "options": { "deviceCode": "X", "address": "0x10" } }
                   ]
                 }
               ]
@@ -418,13 +628,13 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "points": [ { "name": "ready", "deviceCode": "X", "address": 16, "writable": true } ]
+                  "points": [ { "name": "ready", "options": { "deviceCode": "X", "address": 16, "writable": true } } ]
                 }
               ]
             }
@@ -443,13 +653,13 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "points": [ { "name": "bad", "deviceCode": "B", "address": 0 } ]
+                  "points": [ { "name": "bad", "options": { "deviceCode": "B", "address": 0 } } ]
                 }
               ]
             }
@@ -469,13 +679,13 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "points": [ { "name": "run", "deviceCode": "M", "address": 10, "highAlarmLimit": 1 } ]
+                  "points": [ { "name": "run", "options": { "deviceCode": "M", "address": 10, "highAlarmLimit": 1 } } ]
                 }
               ]
             }
@@ -494,14 +704,14 @@ public sealed class ConfigurationTests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "frameType": "1e",
-                  "points": [ { "name": "recipe", "deviceCode": "ZR", "address": 0 } ]
+                  "options": { "frameType": "1e" },
+                  "points": [ { "name": "recipe", "options": { "deviceCode": "ZR", "address": 0 } } ]
                 }
               ]
             }
@@ -548,21 +758,23 @@ public sealed class ConfigurationTests
         var path = Path.Combine(Path.GetTempPath(), $"zeus-mc-config-{Guid.NewGuid():N}.json");
         var initial = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [ { "name": "plc", "channel": "plc-link", "type": "mitsubishi-mc" } ]
             }
             """;
         var updated = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "mc" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "mc" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "mitsubishi-mc",
-                  "frameType": "4e",
-                  "encoding": "ascii",
-                  "serialNumber": 77
+                  "options": {
+                    "frameType": "4e",
+                    "encoding": "ascii",
+                    "serialNumber": 77
+                  }
                 }
               ]
             }
@@ -646,12 +858,16 @@ public sealed class ConfigurationTests
                 || !condition.TryGetProperty("required", out var conditionRequired)
                 || !RequiredArrayContains(conditionRequired, "type")
                 || !rule.TryGetProperty("then", out var consequence)
-                || !consequence.TryGetProperty("required", out var consequenceRequired))
+                || !consequence.TryGetProperty("required", out var consequenceRequired)
+                || !RequiredArrayContains(consequenceRequired, "options")
+                || !consequence.TryGetProperty("properties", out var consequenceProperties)
+                || !consequenceProperties.TryGetProperty("options", out var options)
+                || !options.TryGetProperty("required", out var optionsRequired))
             {
                 continue;
             }
 
-            found = RequiredArrayContains(consequenceRequired, fieldName);
+            found = RequiredArrayContains(optionsRequired, fieldName);
             if (found)
             {
                 break;
@@ -674,6 +890,19 @@ public sealed class ConfigurationTests
         return false;
     }
 
+    private static void AssertSchemaEnumContains(JsonElement schema, string value)
+    {
+        foreach (var item in schema.GetProperty("enum").EnumerateArray())
+        {
+            if (string.Equals(item.GetString(), value, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail($"schema enum should contain '{value}'.");
+    }
+
     private static string FindRepositoryFile(params string[] relativeSegments)
     {
         var relativePath = Path.Combine(relativeSegments);
@@ -687,5 +916,26 @@ public sealed class ConfigurationTests
         }
 
         throw new FileNotFoundException($"找不到仓库文件 {relativePath}。", relativePath);
+    }
+
+    private sealed class CustomJsonBinder : IZeusJsonBinder
+    {
+        public IReadOnlyList<string> DeviceTypes => [];
+
+        public IReadOnlyList<string> ResponderTypes => ["custom-loop"];
+
+        public void ValidateDevice(DeviceConfiguration device, string path)
+            => throw new NotSupportedException();
+
+        public void ValidateResponder(ChannelConfiguration channel, string path)
+        {
+        }
+
+        public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
+            => throw new NotSupportedException();
+
+        public IVirtualResponder? CreateResponder(ChannelConfiguration channel) => null;
+
+        public string DeviceFingerprint(DeviceConfiguration device) => string.Empty;
     }
 }

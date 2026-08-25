@@ -9,6 +9,19 @@ namespace Zeus;
 /// </summary>
 public static class ZeusHostBuilderConfigurationExtensions
 {
+    /// <summary>向当前宿主登记一个 JSON 协议绑定。</summary>
+    public static ZeusHostBuilder AddJsonBinder(this ZeusHostBuilder builder, IZeusJsonBinder binder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        EnsureRegistry(builder).Register(binder);
+        return builder;
+    }
+
+    /// <summary>向当前宿主登记一个 JSON 协议绑定。</summary>
+    public static ZeusHostBuilder AddJsonBinder<TBinder>(this ZeusHostBuilder builder)
+        where TBinder : IZeusJsonBinder, new()
+        => builder.AddJsonBinder(new TBinder());
+
     /// <summary>
     /// 从文件装载配置。默认监视该文件：保存后热更新采集间隔、重连选项，以及通道/设备增删与参数变更。
     /// </summary>
@@ -20,7 +33,8 @@ public static class ZeusHostBuilderConfigurationExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         var fullPath = Path.GetFullPath(path);
-        var document = ZeusConfigurationLoader.LoadFile(fullPath);
+        var registry = EnsureRegistry(builder);
+        var document = ZeusConfigurationLoader.LoadFile(fullPath, registry);
         Apply(builder, document);
         EnsureState(builder).Path = fullPath;
 
@@ -42,7 +56,7 @@ public static class ZeusHostBuilderConfigurationExtensions
     public static ZeusHostBuilder AddJson(this ZeusHostBuilder builder, string json, string sourceName = "配置")
     {
         ArgumentNullException.ThrowIfNull(builder);
-        Apply(builder, ZeusConfigurationLoader.LoadJson(json, sourceName));
+        Apply(builder, ZeusConfigurationLoader.LoadJson(json, sourceName, EnsureRegistry(builder)));
         return builder;
     }
 
@@ -62,7 +76,8 @@ public static class ZeusHostBuilderConfigurationExtensions
         var state = host.Services.GetRequiredService<ZeusConfigurationState>();
         var fullPath = Path.GetFullPath(path ?? state.Path ?? throw new ZeusException(
             "未指定配置文件路径。请传入 path，或先使用 AddJsonFile 装载。"));
-        var document = ZeusConfigurationLoader.LoadFile(fullPath);
+        var registry = host.Services.GetRequiredService<IZeusJsonBinderRegistry>();
+        var document = ZeusConfigurationLoader.LoadFile(fullPath, registry);
         var previous = state.Last ?? new ZeusAppConfiguration();
         try
         {
@@ -90,6 +105,7 @@ public static class ZeusHostBuilderConfigurationExtensions
     /// </summary>
     internal static void Apply(ZeusHostBuilder builder, ZeusAppConfiguration document)
     {
+        var registry = EnsureRegistry(builder);
         ApplyAcquisition(builder.Acquisition, document.Acquisition);
         ApplyReconnect(builder.Reconnect, document.Reconnect);
 
@@ -100,7 +116,7 @@ public static class ZeusHostBuilderConfigurationExtensions
 
         foreach (var device in document.Devices)
         {
-            RequireDeviceBinder(device).ApplyDevice(device, builder: builder);
+            RequireDeviceBinder(registry, device).ApplyDevice(device, builder: builder);
         }
 
         EnsureState(builder).Last = document;
@@ -131,6 +147,9 @@ public static class ZeusHostBuilderConfigurationExtensions
         options.InitialDelay = TimeSpan.FromMilliseconds(configuration.InitialDelayMilliseconds);
         options.MaxDelay = TimeSpan.FromMilliseconds(configuration.MaxDelayMilliseconds);
         options.BackoffMultiplier = configuration.BackoffMultiplier;
+        options.MaxAttempts = configuration.MaxAttempts;
+        options.JitterRatio = configuration.JitterRatio;
+        options.CircuitBreakDuration = TimeSpan.FromMilliseconds(configuration.CircuitBreakMilliseconds);
     }
 
     /// <summary>
@@ -144,6 +163,7 @@ public static class ZeusHostBuilderConfigurationExtensions
     {
         ApplyAcquisition(host.Services.GetRequiredService<AcquisitionOptions>(), next.Acquisition);
         ApplyReconnect(host.Services.GetRequiredService<ChannelReconnectOptions>(), next.Reconnect);
+        var registry = host.Services.GetRequiredService<IZeusJsonBinderRegistry>();
 
         var previousChannels = previous.Channels.ToDictionary(item => item.Name.Trim(), StringComparer.OrdinalIgnoreCase);
         var nextChannels = next.Channels.ToDictionary(item => item.Name.Trim(), StringComparer.OrdinalIgnoreCase);
@@ -160,7 +180,7 @@ public static class ZeusHostBuilderConfigurationExtensions
         foreach (var pair in previousDevices)
         {
             var shouldRemove = !nextDevices.TryGetValue(pair.Key, out var updated)
-                || DeviceFingerprint(pair.Value) != DeviceFingerprint(updated)
+                || DeviceFingerprint(registry, pair.Value) != DeviceFingerprint(registry, updated)
                 || replacedChannels.Contains(pair.Value.Channel.Trim())
                 || !nextChannels.ContainsKey(pair.Value.Channel.Trim());
             if (shouldRemove && host.Devices.TryGet<IDevice>(pair.Key, out _))
@@ -189,11 +209,11 @@ public static class ZeusHostBuilderConfigurationExtensions
         foreach (var pair in nextDevices)
         {
             var shouldAdd = !previousDevices.TryGetValue(pair.Key, out var old)
-                || DeviceFingerprint(old) != DeviceFingerprint(pair.Value)
+                || DeviceFingerprint(registry, old) != DeviceFingerprint(registry, pair.Value)
                 || replacedChannels.Contains(pair.Value.Channel.Trim());
             if (shouldAdd)
             {
-                RequireDeviceBinder(pair.Value).ApplyDevice(pair.Value, host: host);
+                RequireDeviceBinder(registry, pair.Value).ApplyDevice(pair.Value, host: host);
             }
         }
     }
@@ -204,35 +224,48 @@ public static class ZeusHostBuilderConfigurationExtensions
         CancellationToken cancellationToken)
     {
         var name = channel.Name.Trim();
+        var startupMode = ZeusConfigurationText.ParseStartupMode(channel.Startup);
         return ZeusConfigurationText.Normalize(channel.Type) switch
         {
-            "virtual" => Await(host.AddVirtualChannelAsync(name, CreateResponder(channel), cancellationToken)),
-            "serial" => Await(host.AddSerialPortAsync(name, channel.PortName!, channel.BaudRate, cancellationToken)),
-            "tcp" => Await(host.AddTcpClientAsync(name, channel.Host!, channel.Port, cancellationToken)),
+            "virtual" => Await(host.AddVirtualChannelAsync(name, CreateResponder(host.Services, channel), cancellationToken, startupMode)),
+            "serial" => Await(host.AddSerialPortAsync(
+                name,
+                ZeusConfigurationOptions.RequireString(channel.Options, "portName"),
+                ZeusConfigurationOptions.GetInt32(channel.Options, "baudRate", 115200),
+                cancellationToken,
+                startupMode)),
+            "tcp" => Await(host.AddTcpClientAsync(
+                name,
+                ZeusConfigurationOptions.RequireString(channel.Options, "host"),
+                ZeusConfigurationOptions.GetInt32(channel.Options, "port", 502),
+                cancellationToken,
+                startupMode)),
             "tcp-server" => Await(host.AddTcpServerAsync(name, options =>
             {
-                if (!string.IsNullOrWhiteSpace(channel.LocalAddress))
+                var localAddress = ZeusConfigurationOptions.GetString(channel.Options, "localAddress");
+                if (!string.IsNullOrWhiteSpace(localAddress))
                 {
-                    options.LocalAddress = channel.LocalAddress;
+                    options.LocalAddress = localAddress;
                 }
 
-                options.LocalPort = channel.LocalPort;
-            }, cancellationToken)),
+                options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
+            }, cancellationToken, startupMode)),
             "udp" => Await(host.AddUdpClientAsync(name, options =>
             {
-                options.Host = channel.Host!;
-                options.Port = channel.Port;
-                options.LocalPort = channel.LocalPort;
-            }, cancellationToken)),
+                options.Host = ZeusConfigurationOptions.RequireString(channel.Options, "host");
+                options.Port = ZeusConfigurationOptions.GetInt32(channel.Options, "port", 502);
+                options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
+            }, cancellationToken, startupMode)),
             "udp-server" => Await(host.AddUdpServerAsync(name, options =>
             {
-                if (!string.IsNullOrWhiteSpace(channel.LocalAddress))
+                var localAddress = ZeusConfigurationOptions.GetString(channel.Options, "localAddress");
+                if (!string.IsNullOrWhiteSpace(localAddress))
                 {
-                    options.LocalAddress = channel.LocalAddress;
+                    options.LocalAddress = localAddress;
                 }
 
-                options.LocalPort = channel.LocalPort;
-            }, cancellationToken)),
+                options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
+            }, cancellationToken, startupMode)),
             _ => Task.CompletedTask
         };
 
@@ -242,24 +275,20 @@ public static class ZeusHostBuilderConfigurationExtensions
     private static string ChannelFingerprint(ChannelConfiguration channel)
     {
         var type = ZeusConfigurationText.Normalize(channel.Type);
+        var options = ZeusConfigurationOptions.Fingerprint(channel.Options);
         return type switch
         {
-            "virtual" => string.Join('|', type, ZeusConfigurationText.Normalize(channel.Responder), channel.UnitId, ZeusConfigurationText.Normalize(channel.Transport), channel.MeterAddress?.Trim(), channel.CommonAddress, channel.SnmpCommunity, channel.SnmpWriteCommunity),
-            "serial" => string.Join('|', type, channel.PortName?.Trim(), channel.BaudRate),
-            "tcp" => string.Join('|', type, channel.Host?.Trim(), channel.Port),
-            "tcp-server" => string.Join('|', "tcp-server", channel.LocalAddress?.Trim(), channel.LocalPort),
-            "udp" => string.Join('|', type, channel.Host?.Trim(), channel.Port, channel.LocalPort),
-            "udp-server" => string.Join('|', "udp-server", channel.LocalAddress?.Trim(), channel.LocalPort),
+            "virtual" or "serial" or "tcp" or "tcp-server" or "udp" or "udp-server" => string.Join('|', type, channel.Startup, options),
             _ => type
         };
     }
 
-    private static string DeviceFingerprint(DeviceConfiguration device)
+    private static string DeviceFingerprint(IZeusJsonBinderRegistry registry, DeviceConfiguration device)
     {
         var points = string.Join(';', device.Points.Select(ZeusConfigurationText.PointFingerprint));
-        var binder = ZeusJsonBinders.FindDevice(ZeusConfigurationText.Normalize(device.Type));
+        var binder = registry.FindDevice(ZeusConfigurationText.Normalize(device.Type));
         var protocol = binder?.DeviceFingerprint(device) ?? ZeusConfigurationText.Normalize(device.Type);
-        return string.Join('|', device.Channel.Trim(), protocol, points);
+        return string.Join('|', device.Channel.Trim(), protocol, ZeusConfigurationOptions.Fingerprint(device.Options), points);
     }
 
     private static ZeusConfigurationState EnsureState(ZeusHostBuilder builder)
@@ -275,68 +304,96 @@ public static class ZeusHostBuilderConfigurationExtensions
         return state;
     }
 
+    private static IZeusJsonBinderRegistry EnsureRegistry(ZeusHostBuilder builder)
+    {
+        var existing = builder.Services.FirstOrDefault(descriptor => descriptor.ServiceType == typeof(IZeusJsonBinderRegistry));
+        if (existing?.ImplementationInstance is IZeusJsonBinderRegistry registry)
+        {
+            return registry;
+        }
+
+        registry = new ZeusJsonBinderRegistry();
+        builder.Services.AddSingleton<IZeusJsonBinderRegistry>(registry);
+        return registry;
+    }
+
     private static void ApplyChannel(ZeusHostBuilder builder, ChannelConfiguration channel)
     {
         var name = channel.Name.Trim();
+        var startupMode = ZeusConfigurationText.ParseStartupMode(channel.Startup);
         switch (ZeusConfigurationText.Normalize(channel.Type))
         {
             case "virtual":
-                builder.AddVirtualChannel(name, CreateResponder(channel));
+                builder.AddVirtualChannel(name, CreateResponder(EnsureRegistry(builder), channel));
                 break;
             case "serial":
-                builder.AddSerialPort(name, channel.PortName!, channel.BaudRate);
+                builder.AddSerialPort(
+                    name,
+                    ZeusConfigurationOptions.RequireString(channel.Options, "portName"),
+                    ZeusConfigurationOptions.GetInt32(channel.Options, "baudRate", 115200));
                 break;
             case "tcp":
-                builder.AddTcpClient(name, channel.Host!, channel.Port);
+                builder.AddTcpClient(
+                    name,
+                    ZeusConfigurationOptions.RequireString(channel.Options, "host"),
+                    ZeusConfigurationOptions.GetInt32(channel.Options, "port", 502));
                 break;
             case "tcp-server":
                 builder.AddTcpServer(name, options =>
                 {
-                    if (!string.IsNullOrWhiteSpace(channel.LocalAddress))
+                    var localAddress = ZeusConfigurationOptions.GetString(channel.Options, "localAddress");
+                    if (!string.IsNullOrWhiteSpace(localAddress))
                     {
-                        options.LocalAddress = channel.LocalAddress;
+                        options.LocalAddress = localAddress;
                     }
 
-                    options.LocalPort = channel.LocalPort;
+                    options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
                 });
                 break;
             case "udp":
                 builder.AddUdpClient(name, options =>
                 {
-                    options.Host = channel.Host!;
-                    options.Port = channel.Port;
-                    options.LocalPort = channel.LocalPort;
+                    options.Host = ZeusConfigurationOptions.RequireString(channel.Options, "host");
+                    options.Port = ZeusConfigurationOptions.GetInt32(channel.Options, "port", 502);
+                    options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
                 });
                 break;
             case "udp-server":
                 builder.AddUdpServer(name, options =>
                 {
-                    if (!string.IsNullOrWhiteSpace(channel.LocalAddress))
+                    var localAddress = ZeusConfigurationOptions.GetString(channel.Options, "localAddress");
+                    if (!string.IsNullOrWhiteSpace(localAddress))
                     {
-                        options.LocalAddress = channel.LocalAddress;
+                        options.LocalAddress = localAddress;
                     }
 
-                    options.LocalPort = channel.LocalPort;
+                    options.LocalPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort");
                 });
                 break;
         }
+
+        builder.Register((_, channels, _) => channels.Get(name).StartupMode = startupMode);
     }
 
-    private static IVirtualResponder? CreateResponder(ChannelConfiguration channel)
+    private static IVirtualResponder? CreateResponder(IServiceProvider services, ChannelConfiguration channel)
+        => CreateResponder(services.GetRequiredService<IZeusJsonBinderRegistry>(), channel);
+
+    private static IVirtualResponder? CreateResponder(IZeusJsonBinderRegistry registry, ChannelConfiguration channel)
     {
-        if (string.IsNullOrWhiteSpace(channel.Responder))
+        var responder = ZeusConfigurationOptions.GetString(channel.Options, "responder");
+        if (string.IsNullOrWhiteSpace(responder))
         {
             return null;
         }
 
-        var binder = ZeusJsonBinders.FindResponder(ZeusConfigurationText.Normalize(channel.Responder));
+        var binder = registry.FindResponder(ZeusConfigurationText.Normalize(responder));
         return binder?.CreateResponder(channel);
     }
 
-    private static IZeusJsonBinder RequireDeviceBinder(DeviceConfiguration device)
+    private static IZeusJsonBinder RequireDeviceBinder(IZeusJsonBinderRegistry registry, DeviceConfiguration device)
     {
         var type = ZeusConfigurationText.Normalize(device.Type);
-        return ZeusJsonBinders.FindDevice(type)
+        return registry.FindDevice(type)
             ?? throw new ZeusException($"设备类型 {device.Type} 没有对应的 JSON 绑定。{ZeusJsonBinders.MissingDevicePackageMessage(type)}。");
     }
 }
@@ -367,8 +424,11 @@ internal sealed class ZeusConfigurationWatchService : IDisposable, Microsoft.Ext
     private readonly ILogger<ZeusConfigurationWatchService> _logger;
     private readonly FileSystemWatcher _watcher;
     private readonly object _gate = new();
-    private DateTime _lastWrite = DateTime.MinValue;
     private readonly SemaphoreSlim _reload = new(1, 1);
+    private CancellationTokenSource? _debounceCts;
+    private int _reloadRequested;
+    private int _disposed;
+    private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(250);
 
     /// <summary>
     /// 创建监视服务。
@@ -403,35 +463,55 @@ internal sealed class ZeusConfigurationWatchService : IDisposable, Microsoft.Ext
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _watcher.EnableRaisingEvents = false;
+        CancelDebounce();
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        CancelDebounce();
         _watcher.Dispose();
         _reload.Dispose();
     }
 
     private void OnChanged(object sender, FileSystemEventArgs e)
     {
-        // 编辑器保存常连续触发两次；200ms 内的重复事件忽略。
+        CancellationToken token;
         lock (_gate)
         {
-            var now = DateTime.UtcNow;
-            if (now - _lastWrite < TimeSpan.FromMilliseconds(200))
-            {
-                return;
-            }
-
-            _lastWrite = now;
+            _debounceCts?.Cancel();
+            _debounceCts?.Dispose();
+            _debounceCts = new CancellationTokenSource();
+            token = _debounceCts.Token;
         }
 
-        _ = ReloadAsync();
+        _ = DebounceAndReloadAsync(token);
     }
 
-    private async Task ReloadAsync()
+    private async Task DebounceAndReloadAsync(CancellationToken cancellationToken)
     {
+        try
+        {
+            await Task.Delay(DebounceDelay, cancellationToken).ConfigureAwait(false);
+            await QueueReloadAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private async Task QueueReloadAsync()
+    {
+        Interlocked.Exchange(ref _reloadRequested, 1);
         if (!await _reload.WaitAsync(0).ConfigureAwait(false))
         {
             return;
@@ -439,8 +519,23 @@ internal sealed class ZeusConfigurationWatchService : IDisposable, Microsoft.Ext
 
         try
         {
+            while (Interlocked.Exchange(ref _reloadRequested, 0) == 1)
+            {
+                await ReloadOnceAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _reload.Release();
+        }
+    }
+
+    private async Task ReloadOnceAsync()
+    {
+        try
+        {
             var host = _accessor.Host;
-            if (host is null)
+            if (host is null || Volatile.Read(ref _disposed) != 0)
             {
                 return;
             }
@@ -451,9 +546,15 @@ internal sealed class ZeusConfigurationWatchService : IDisposable, Microsoft.Ext
         {
             _logger.LogWarning(ZeusLogEvents.ConfigurationReloadFailed, ex, "配置文件 {Path} 热更新失败，将沿用当前拓扑。", _watch.Path);
         }
-        finally
+    }
+
+    private void CancelDebounce()
+    {
+        lock (_gate)
         {
-            _reload.Release();
+            _debounceCts?.Cancel();
+            _debounceCts?.Dispose();
+            _debounceCts = null;
         }
     }
 }

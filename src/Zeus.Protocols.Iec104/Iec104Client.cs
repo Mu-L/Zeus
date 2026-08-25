@@ -9,7 +9,7 @@ public sealed class Iec104Client : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly Iec104Options _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ChannelTransactionCoordinator _gate;
     private readonly object _bufferLock = new();
     private readonly List<byte> _buffer = [];
     private readonly Queue<UnackedIFrame> _unackedOutgoing = [];
@@ -31,6 +31,7 @@ public sealed class Iec104Client : IAsyncDisposable
     public Iec104Client(IChannel channel, Iec104Options? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
         _options = CopyOptions(options ?? new Iec104Options());
         Iec104Codec.ValidateOptions(_options);
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -168,7 +169,6 @@ public sealed class Iec104Client : IAsyncDisposable
         }
 
         _linkCts?.Dispose();
-        _gate.Dispose();
     }
 
     private async Task SendCommandAsync(Iec104DataType dataType, int address, object value, CancellationToken cancellationToken)

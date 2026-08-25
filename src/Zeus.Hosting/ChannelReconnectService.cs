@@ -91,7 +91,7 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
         }
 
         Unsubscribe(e.Channel);
-        Cancel(e.Channel.Name);
+        CancelAndRemove(e.Channel.Name, publishCancelled: true);
     }
 
     private void Subscribe(IChannel channel)
@@ -136,11 +136,19 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             return;
         }
 
-        Cancel(channel.Name);
-        if (e.Current is ChannelState.Open or ChannelState.Closed)
+        if (e.Current == ChannelState.Open)
         {
-            ResetAttempt(channel.Name);
+            CompleteAttempt(channel.Name);
+            return;
         }
+
+        if (e.Current == ChannelState.Closed)
+        {
+            CancelAndRemove(channel.Name, publishCancelled: true);
+            return;
+        }
+
+        Cancel(channel.Name);
     }
 
     private void Schedule(IChannel channel)
@@ -165,6 +173,23 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             existing?.Cts.Dispose();
 
             var next = (existing?.Count ?? 0) + 1;
+            if (_options.MaxAttempts > 0 && next > _options.MaxAttempts)
+            {
+                var circuitDelay = _options.CircuitBreakDuration;
+                if (circuitDelay > TimeSpan.Zero)
+                {
+                    cts = new CancellationTokenSource();
+                    _attempts[channel.Name] = new ReconnectAttempt(0, cts, Pending: true);
+                    _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.CircuitOpen, next - 1, circuitDelay));
+                    _ = OpenCircuitAsync(channel, circuitDelay, cts, cts.Token);
+                    return;
+                }
+
+                _attempts.Remove(channel.Name);
+                _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.GaveUp, next - 1));
+                return;
+            }
+
             cts = new CancellationTokenSource();
             _attempts[channel.Name] = new ReconnectAttempt(next, cts, Pending: true);
             token = cts.Token;
@@ -181,7 +206,43 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
                 (int)delay.TotalMilliseconds,
                 attempt);
         }
+        _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.Scheduled, attempt, delay));
         _ = ReconnectAsync(channel, delay, cts, token);
+    }
+
+    private async Task OpenCircuitAsync(
+        IChannel channel,
+        TimeSpan delay,
+        CancellationTokenSource owner,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            var shouldRetry = false;
+            lock (_gate)
+            {
+                if (_attempts.TryGetValue(channel.Name, out var current) && ReferenceEquals(current.Cts, owner))
+                {
+                    _attempts[channel.Name] = current with { Pending = false };
+                    shouldRetry = channel.State == ChannelState.Faulted
+                        && _runState.IsRunning
+                        && _options.Enabled
+                        && !cancellationToken.IsCancellationRequested;
+                }
+            }
+
+            if (shouldRetry)
+            {
+                Schedule(channel);
+            }
+        }
     }
 
     private async Task ReconnectAsync(
@@ -203,6 +264,7 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             {
                 _logger.LogInformation(ZeusLogEvents.ReconnectSucceeded, "通道 {Channel} 已自动重连。", channel.Name);
             }
+            _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.Succeeded, 0));
         }
         catch (OperationCanceledException)
         {
@@ -214,6 +276,7 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
         {
             using var scope = LogScope.Begin(_logger, "Channel", channel.Name);
             _logger.LogWarning(ZeusLogEvents.ReconnectFailed, ex, "通道 {Channel} 自动重连失败，将继续退避重试。", channel.Name);
+            _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.Failed, 0, error: ex));
         }
         finally
         {
@@ -253,13 +316,33 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
         var millis = initial.TotalMilliseconds * factor;
         if (millis > max.TotalMilliseconds)
         {
-            return max;
+            millis = max.TotalMilliseconds;
+        }
+
+        var jitterRatio = _options.JitterRatio;
+        if (double.IsFinite(jitterRatio) && jitterRatio > 0)
+        {
+            jitterRatio = Math.Min(1, jitterRatio);
+            var offset = (Random.Shared.NextDouble() * 2d) - 1d;
+            millis *= 1d + (offset * jitterRatio);
+            millis = Math.Max(1, Math.Min(max.TotalMilliseconds, millis));
         }
 
         return TimeSpan.FromMilliseconds(millis);
     }
 
-    private void ResetAttempt(string name)
+    private void CompleteAttempt(string name)
+    {
+        lock (_gate)
+        {
+            if (_attempts.Remove(name, out var attempt))
+            {
+                attempt.Cts.Dispose();
+            }
+        }
+    }
+
+    private void CancelAndRemove(string name, bool publishCancelled)
     {
         lock (_gate)
         {
@@ -267,6 +350,10 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             {
                 attempt.Cts.Cancel();
                 attempt.Cts.Dispose();
+                if (publishCancelled)
+                {
+                    _options.PublishState(new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count));
+                }
             }
         }
     }
@@ -279,6 +366,7 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             {
                 attempt.Cts.Cancel();
                 _attempts[name] = attempt with { Pending = false };
+                _options.PublishState(new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count));
             }
         }
     }

@@ -12,23 +12,24 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
-        ParseWordOrder(device.WordOrder, $"{path}.wordOrder");
-        ParseTransport(device.Transport, $"{path}.transport");
+        ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first", path), $"{path}.options.wordOrder");
+        ParseTransport(ZeusConfigurationOptions.GetString(device.Options, "transport", "udp", path), $"{path}.options.transport");
         ValidatePoints(device.Points, path);
     }
 
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
-        var transport = ZeusConfigurationText.Normalize(channel.Transport);
+        var transportValue = ZeusConfigurationOptions.GetString(channel.Options, "transport", "udp", path);
+        var transport = ZeusConfigurationText.Normalize(transportValue);
         if (transport is not ("udp" or "tcp"))
         {
-            throw new ZeusException($"{path}.transport「{channel.Transport}」不受支持。FINS 虚拟从站可选 udp、tcp。");
+            throw new ZeusException($"{path}.options.transport「{transportValue}」不受支持。FINS 虚拟从站可选 udp、tcp。");
         }
     }
 
@@ -37,22 +38,22 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     {
         if (builder is not null)
         {
-            builder.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(device.Transport, "device.transport"), Options(device), Timeout(device), Points(device));
+            builder.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(GetString(device, "transport", "udp"), "device.options.transport"), Options(device), Timeout(device), Points(device));
             return;
         }
 
-        host!.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(device.Transport, "device.transport"), Options(device), Timeout(device), Points(device));
+        host!.AddOmronFins(device.Name.Trim(), device.Channel.Trim(), ParseTransport(GetString(device, "transport", "udp"), "device.options.transport"), Options(device), Timeout(device), Points(device));
     }
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "fins"
-            ? new FinsSlaveResponder(ZeusConfigurationText.Normalize(channel.Transport) == "tcp" ? FinsTransport.Tcp : FinsTransport.Udp)
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "fins"
+            ? new FinsSlaveResponder(ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "transport", "udp")) == "tcp" ? FinsTransport.Tcp : FinsTransport.Udp)
             : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', ZeusConfigurationText.Normalize(device.Transport), device.TimeoutMilliseconds, device.DestinationNode, device.SourceNode, ZeusConfigurationText.Normalize(device.WordOrder));
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static FinsTransport ParseTransport(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch
@@ -63,7 +64,7 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
         };
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static Action<FinsPointMap>? Points(DeviceConfiguration device)
         => device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
@@ -71,38 +72,41 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     private static FinsOptions Options(DeviceConfiguration device)
         => new()
         {
-            DestinationNetwork = (byte)device.DestinationNetwork,
-            DestinationNode = (byte)device.DestinationNode,
-            DestinationUnit = (byte)device.DestinationUnit,
-            SourceNetwork = (byte)device.SourceNetwork,
-            SourceNode = (byte)device.SourceNode,
-            SourceUnit = (byte)device.SourceUnit,
-            GatewayCount = (byte)device.GatewayCount,
-            InformationControlField = (byte)device.InformationControlField,
-            TcpRequestedClientNode = (byte)device.TcpRequestedClientNode,
-            UseTcpNodeAddressHandshake = device.UseTcpNodeAddressHandshake,
-            WordOrder = ParseWordOrder(device.WordOrder, "device.wordOrder")
+            DestinationNetwork = (byte)GetInt32(device, "destinationNetwork"),
+            DestinationNode = (byte)GetInt32(device, "destinationNode"),
+            DestinationUnit = (byte)GetInt32(device, "destinationUnit"),
+            SourceNetwork = (byte)GetInt32(device, "sourceNetwork"),
+            SourceNode = (byte)GetInt32(device, "sourceNode"),
+            SourceUnit = (byte)GetInt32(device, "sourceUnit"),
+            GatewayCount = (byte)GetInt32(device, "gatewayCount", 2),
+            InformationControlField = (byte)GetInt32(device, "informationControlField", 0x80),
+            TcpRequestedClientNode = (byte)GetInt32(device, "tcpRequestedClientNode"),
+            UseTcpNodeAddressHandshake = ZeusConfigurationOptions.GetBoolean(device.Options, "useTcpNodeAddressHandshake", true),
+            WordOrder = ParseWordOrder(GetString(device, "wordOrder", "high-word-first"), "device.options.wordOrder")
         };
 
     private static void ValidatePoints(List<PointConfiguration> points, string devicePath)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var point in points)
+        for (var i = 0; i < points.Count; i++)
         {
+            var point = points[i];
             ZeusConfigurationText.EnsureName(point.Name, $"{devicePath}.points");
             if (!names.Add(point.Name.Trim()))
             {
                 throw new ZeusException($"{devicePath} 点名 {point.Name} 重复。");
             }
 
-            if (string.IsNullOrWhiteSpace(point.Area))
+            var path = $"{devicePath}.points[{i}]";
+            var areaValue = ZeusConfigurationOptions.GetString(point.Options, "area", path: path);
+            if (string.IsNullOrWhiteSpace(areaValue))
             {
-                throw new ZeusException($"点 {point.Name}.area 必须指定。");
+                throw new ZeusException($"{path}.options.area 必须指定。");
             }
 
-            var dataType = ParseDataType(point.DataType, $"point {point.Name}.dataType");
-            ParseArea(point.Area, dataType, $"point {point.Name}.area");
-            ZeusConfigurationText.ValidatePointAlarms(point, $"point {point.Name}");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", path), $"{path}.options.dataType");
+            ParseArea(areaValue, dataType, $"{path}.options.area");
+            ZeusConfigurationText.ValidatePointAlarms(point, path);
         }
     }
 
@@ -110,16 +114,19 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     {
         foreach (var point in points)
         {
-            var dataType = ParseDataType(point.DataType, $"point {point.Name}.dataType");
-            var area = ParseArea(point.Area, dataType, $"point {point.Name}.area");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"), $"point {point.Name}.options.dataType");
+            var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"), dataType, $"point {point.Name}.options.area");
             var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
+            var address = (ushort)ZeusConfigurationOptions.GetInt32(point.Options, "address");
+            var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
             if (dataType == FinsDataType.Bit)
             {
-                map.Bit(point.Name, area, (ushort)point.Address, (byte)point.BitOffset);
+                map.Bit(point.Name, area, address, bitOffset);
             }
-            else if (point.Scale is { } scale)
+            else if (scale is { } wordScale)
             {
-                map.Word(point.Name, area, (ushort)point.Address, scale);
+                map.Word(point.Name, area, address, wordScale);
                 if (alarmLimits is not null)
                 {
                     map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
@@ -127,19 +134,25 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
             }
             else
             {
-                map.Word(point.Name, area, (ushort)point.Address);
+                map.Word(point.Name, area, address);
                 if (alarmLimits is not null)
                 {
                     map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
                 }
             }
 
-            if (point.Writable)
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
             {
                 map.Writable(point.Name);
             }
         }
     }
+
+    private static string? GetString(DeviceConfiguration device, string name, string? defaultValue = null)
+        => ZeusConfigurationOptions.GetString(device.Options, name, defaultValue);
+
+    private static int GetInt32(DeviceConfiguration device, string name, int defaultValue = 0)
+        => ZeusConfigurationOptions.GetInt32(device.Options, name, defaultValue);
 
     private static FinsDataType ParseDataType(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch

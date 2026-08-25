@@ -141,24 +141,56 @@ internal sealed class ZeusHostRuntime : IZeusHost
     }
 
     /// <summary>
-    /// 按注册顺序打开全部通道。单个失败不阻断其余通道。
+    /// 按注册顺序打开全部通道。必需通道失败会让宿主启动失败；可选/降级通道失败后继续启动。
     /// </summary>
     private async Task OpenAllChannelsAsync(CancellationToken cancellationToken)
     {
+        var opened = new List<IChannel>();
+        var requiredFailures = new List<Exception>();
         foreach (var channel in Channels.All)
         {
             try
             {
                 await channel.OpenAsync(cancellationToken).ConfigureAwait(false);
+                opened.Add(channel);
             }
             catch (Exception ex)
             {
-                // 打开失败已记入通道 Faulted；自动重连服务会在运行闸门打开后重试。
-                // 必须打 Error，否则 StartAsync 成功会让现场以为通道已经可用。
+                // 打开失败已记入通道 Faulted；可选/降级通道会在运行闸门打开后由自动重连重试。
                 using var scope = LogScope.Begin(_logger, "Channel", channel.Name);
-                _logger.LogError(ZeusLogEvents.ChannelOpenFailed, ex, "通道 {Channel} 启动时打开失败，宿主仍将继续启动并由自动重连重试。", channel.Name);
+                if (channel.StartupMode == ChannelStartupMode.Required)
+                {
+                    _logger.LogError(ZeusLogEvents.ChannelOpenFailed, ex, "必需通道 {Channel} 启动时打开失败，宿主启动将中止。", channel.Name);
+                    requiredFailures.Add(ex);
+                    continue;
+                }
+
+                var mode = channel.StartupMode == ChannelStartupMode.Optional ? "可选" : "降级";
+                _logger.LogWarning(ZeusLogEvents.ChannelOpenFailed, ex, "{Mode}通道 {Channel} 启动时打开失败，宿主继续启动并由自动重连重试。", mode, channel.Name);
             }
         }
+
+        if (requiredFailures.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var channel in opened.AsEnumerable().Reverse())
+        {
+            try
+            {
+                await channel.CloseAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                using var scope = LogScope.Begin(_logger, "Channel", channel.Name);
+                _logger.LogWarning(ZeusLogEvents.ChannelCloseWarning, ex, "宿主启动失败回滚时关闭通道 {Channel} 失败。", channel.Name);
+            }
+        }
+
+        throw new ZeusException(
+            $"宿主启动失败：{requiredFailures.Count} 个必需通道未能打开。请检查通道配置，或把非关键通道设为 Optional/DegradedAllowed。",
+            requiredFailures[0]);
     }
 
     /// <summary>

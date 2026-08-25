@@ -7,7 +7,9 @@
     {
       "name": "enip-link",
       "type": "virtual",
-      "responder": "ethernet-ip"
+      "options": {
+        "responder": "ethernet-ip"
+      }
     }
   ],
   "devices": [
@@ -16,10 +18,32 @@
       "channel": "enip-link",
       "type": "ethernet-ip",
       "points": [
-        { "name": "temperature", "tag": "Temperature", "dataType": "int", "scale": 0.1, "writable": true },
-        { "name": "running", "tag": "Running", "dataType": "bool", "writable": true },
-        { "name": "speed", "tag": "Program:Main.Speed", "dataType": "dint" }
+        {
+          "name": "temperature",
+          "options": {
+            "tag": "Temperature",
+            "dataType": "int",
+            "scale": 0.1,
+            "writable": true
+          }
+        },
+        {
+          "name": "running",
+          "options": {
+            "tag": "Running",
+            "dataType": "bool",
+            "writable": true
+          }
+        },
+        {
+          "name": "speed",
+          "options": {
+            "tag": "Program:Main.Speed",
+            "dataType": "dint"
+          }
+        }
       ]
     }
   ]
 }
+

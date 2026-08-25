@@ -14,17 +14,17 @@ public sealed class McJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        var frameType = ParseFrameType(device.FrameType, $"{path}.frameType");
-        ParseEncoding(device.Encoding, $"{path}.encoding");
-        ValidateByte(device.NetworkNumber, $"{path}.networkNumber");
-        ValidateByte(device.PcNumber, $"{path}.pcNumber");
-        ValidateUInt16(device.IoNumber, $"{path}.ioNumber");
-        ValidateByte(device.StationNumber, $"{path}.stationNumber");
-        ValidateUInt16(device.MonitoringTimer, $"{path}.monitoringTimer");
-        ValidateUInt16(device.SerialNumber, $"{path}.serialNumber");
-        if (device.TimeoutMilliseconds is <= 0)
+        var frameType = ParseFrameType(GetString(device, "frameType", "3e"), $"{path}.options.frameType");
+        ParseEncoding(GetString(device, "encoding", "binary"), $"{path}.options.encoding");
+        ValidateByte(GetInt32(device, "networkNumber"), $"{path}.options.networkNumber");
+        ValidateByte(GetInt32(device, "pcNumber", 0xFF), $"{path}.options.pcNumber");
+        ValidateUInt16(GetInt32(device, "ioNumber", 0x03FF), $"{path}.options.ioNumber");
+        ValidateByte(GetInt32(device, "stationNumber"), $"{path}.options.stationNumber");
+        ValidateUInt16(GetInt32(device, "monitoringTimer", 0x0010), $"{path}.options.monitoringTimer");
+        ValidateUInt16(GetInt32(device, "serialNumber"), $"{path}.options.serialNumber");
+        if (GetNullableInt32(device, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
         ValidatePoints(device.Points, path, frameType);
@@ -38,7 +38,7 @@ public sealed class McJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
     {
-        var timeout = device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
+        var timeout = ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
         Action<McPointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
         if (builder is not null)
         {
@@ -51,32 +51,23 @@ public sealed class McJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "mc" ? new McSlaveResponder() : null;
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "mc" ? new McSlaveResponder() : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|',
-            ZeusConfigurationText.Normalize(device.FrameType),
-            ZeusConfigurationText.Normalize(device.Encoding),
-            device.TimeoutMilliseconds,
-            device.NetworkNumber,
-            device.PcNumber,
-            device.IoNumber,
-            device.StationNumber,
-            device.MonitoringTimer,
-            device.SerialNumber);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static McOptions CreateOptions(DeviceConfiguration device)
         => new()
         {
-            FrameType = ParseFrameType(device.FrameType, "device.frameType"),
-            DataEncoding = ParseEncoding(device.Encoding, "device.encoding"),
-            NetworkNumber = (byte)device.NetworkNumber,
-            PcNumber = (byte)device.PcNumber,
-            IoNumber = (ushort)device.IoNumber,
-            StationNumber = (byte)device.StationNumber,
-            MonitoringTimer = (ushort)device.MonitoringTimer,
-            SerialNumber = (ushort)device.SerialNumber
+            FrameType = ParseFrameType(GetString(device, "frameType", "3e"), "device.options.frameType"),
+            DataEncoding = ParseEncoding(GetString(device, "encoding", "binary"), "device.options.encoding"),
+            NetworkNumber = (byte)GetInt32(device, "networkNumber"),
+            PcNumber = (byte)GetInt32(device, "pcNumber", 0xFF),
+            IoNumber = (ushort)GetInt32(device, "ioNumber", 0x03FF),
+            StationNumber = (byte)GetInt32(device, "stationNumber"),
+            MonitoringTimer = (ushort)GetInt32(device, "monitoringTimer", 0x0010),
+            SerialNumber = (ushort)GetInt32(device, "serialNumber")
         };
 
     private static void ValidatePoints(List<PointConfiguration> points, string devicePath, McFrameType frameType)
@@ -92,42 +83,46 @@ public sealed class McJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"{path}.name「{point.Name}」在同一设备内重复。");
             }
 
-            if (string.IsNullOrWhiteSpace(point.DeviceCode))
+            var deviceCodeValue = ZeusConfigurationOptions.GetString(point.Options, "deviceCode", path: path);
+            if (string.IsNullOrWhiteSpace(deviceCodeValue))
             {
-                throw new ZeusException($"{path}.deviceCode 必须指定。Mitsubishi MC 可选 D、M、X、Y、W、R、ZR。");
+                throw new ZeusException($"{path}.options.deviceCode 必须指定。Mitsubishi MC 可选 D、M、X、Y、W、R、ZR。");
             }
 
-            var deviceCode = ParseDeviceCode(point.DeviceCode, $"{path}.deviceCode");
+            var deviceCode = ParseDeviceCode(deviceCodeValue, $"{path}.options.deviceCode");
             if (frameType == McFrameType.Frame1E && deviceCode == McDeviceCode.ExtendedFileRegister)
             {
-                throw new ZeusException($"{path}.deviceCode 为 ZR，但 MC 1E 帧不支持 ZR。请改用 3e/4e，或移除该点。");
+                throw new ZeusException($"{path}.options.deviceCode 为 ZR，但 MC 1E 帧不支持 ZR。请改用 3e/4e，或移除该点。");
             }
 
-            if (point.Address is < 0 or > 0xFFFFFF)
+            var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+            if (address is < 0 or > 0xFFFFFF)
             {
-                throw new ZeusException($"{path}.address 必须介于 0 与 16777215 之间。");
+                throw new ZeusException($"{path}.options.address 必须介于 0 与 16777215 之间。");
             }
 
-            if (point.Scale is <= 0)
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+            if (scale is <= 0)
             {
-                throw new ZeusException($"{path}.scale 必须大于 0。");
+                throw new ZeusException($"{path}.options.scale 必须大于 0。");
             }
 
             ZeusConfigurationText.ValidatePointAlarms(point, path);
             var isBit = deviceCode is McDeviceCode.InternalRelay or McDeviceCode.InputRelay or McDeviceCode.OutputRelay;
-            if (point.Scale is not null && isBit)
+            if (scale is not null && isBit)
             {
-                throw new ZeusException($"{path} 是 MC 位软元件，不能配置 scale。");
+                throw new ZeusException($"{path} 是 MC 位软元件，不能配置 options.scale。");
             }
 
-            if ((point.LowAlarmLimit is not null || point.HighAlarmLimit is not null) && isBit)
+            if ((ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+                    || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null) && isBit)
             {
-                throw new ZeusException($"{path} 是 MC 位软元件，不能配置 lowAlarmLimit 或 highAlarmLimit。");
+                throw new ZeusException($"{path} 是 MC 位软元件，不能配置 options.lowAlarmLimit 或 options.highAlarmLimit。");
             }
 
-            if (point.Writable && deviceCode == McDeviceCode.InputRelay)
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable", path: path) && deviceCode == McDeviceCode.InputRelay)
             {
-                throw new ZeusException($"{path}.deviceCode 为 X 输入继电器，该软元件只读，不能设置 writable: true。");
+                throw new ZeusException($"{path}.options.deviceCode 为 X 输入继电器，该软元件只读，不能设置 options.writable: true。");
             }
         }
     }
@@ -136,21 +131,23 @@ public sealed class McJsonBinder : IZeusJsonBinder
     {
         foreach (var point in points)
         {
-            var deviceCode = ParseDeviceCode(point.DeviceCode, $"point {point.Name}.deviceCode");
+            var deviceCode = ParseDeviceCode(ZeusConfigurationOptions.GetString(point.Options, "deviceCode"), $"point {point.Name}.options.deviceCode");
             var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
+            var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
             var isWord = deviceCode is McDeviceCode.DataRegister
                 or McDeviceCode.LinkRegister
                 or McDeviceCode.FileRegister
                 or McDeviceCode.ExtendedFileRegister;
             if (isWord)
             {
-                if (point.Scale is { } scale)
+                if (scale is { } wordScale)
                 {
-                    map.Word(point.Name, deviceCode, point.Address, scale);
+                    map.Word(point.Name, deviceCode, address, wordScale);
                 }
                 else
                 {
-                    map.Word(point.Name, deviceCode, point.Address);
+                    map.Word(point.Name, deviceCode, address);
                 }
 
                 if (alarmLimits is not null)
@@ -160,15 +157,24 @@ public sealed class McJsonBinder : IZeusJsonBinder
             }
             else
             {
-                map.Bit(point.Name, deviceCode, point.Address);
+                map.Bit(point.Name, deviceCode, address);
             }
 
-            if (point.Writable)
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
             {
                 map.Writable(point.Name);
             }
         }
     }
+
+    private static string? GetString(DeviceConfiguration device, string name, string? defaultValue = null)
+        => ZeusConfigurationOptions.GetString(device.Options, name, defaultValue);
+
+    private static int GetInt32(DeviceConfiguration device, string name, int defaultValue = 0)
+        => ZeusConfigurationOptions.GetInt32(device.Options, name, defaultValue);
+
+    private static int? GetNullableInt32(DeviceConfiguration device, string name, string path)
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, name, path);
 
     private static McFrameType ParseFrameType(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch

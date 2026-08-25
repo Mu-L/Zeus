@@ -27,6 +27,8 @@ dotnet new zeus-modbus -n MyOven
 
 按功能选择程序集：
 
+使用 `Zeus.Configuration` 时，`channels` / `devices` / `points` 根层只保留结构字段；端口、从站地址、点位地址、缩放和写回等协议参数统一写入对应对象的 `options`。
+
 | 包 | 用途 |
 | --- | --- |
 | [Zeus.Abstractions](https://www.nuget.org/packages/Zeus.Abstractions) | 通道、设备、点表与宿主契约 |

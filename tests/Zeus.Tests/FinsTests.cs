@@ -119,19 +119,17 @@ public sealed class FinsTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "fins-link", "type": "virtual", "responder": "fins", "transport": "udp" }
+                { "name": "fins-link", "type": "virtual", "options": { "responder": "fins", "transport": "udp" } }
               ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "fins-link",
                   "type": "omron-fins",
-                  "transport": "udp",
-                  "sourceNode": 10,
-                  "destinationNode": 1,
+                  "options": { "transport": "udp", "sourceNode": 10, "destinationNode": 1 },
                   "points": [
-                    { "name": "temperature", "area": "dm", "address": 100, "dataType": "word", "scale": 0.1, "writable": true },
-                    { "name": "running", "area": "cio", "address": 10, "bit": 0, "dataType": "bit", "writable": true }
+                    { "name": "temperature", "options": { "area": "dm", "address": 100, "dataType": "word", "scale": 0.1, "writable": true } },
+                    { "name": "running", "options": { "area": "cio", "address": 10, "bit": 0, "dataType": "bit", "writable": true } }
                   ]
                 }
               ]

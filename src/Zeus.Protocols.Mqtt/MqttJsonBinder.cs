@@ -14,14 +14,15 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
         foreach (var point in device.Points)
         {
-            var topic = string.IsNullOrWhiteSpace(point.Topic) ? point.Name : point.Topic.Trim();
+            var topic = ZeusConfigurationOptions.GetString(point.Options, "topic");
+            topic = string.IsNullOrWhiteSpace(topic) ? point.Name : topic.Trim();
             if (topic.Contains('+') || topic.Contains('#'))
             {
                 throw new ZeusException($"{path} 点 {point.Name} 的 topic 不能包含 MQTT 通配符。");
@@ -48,30 +49,30 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "mqtt" ? new MqttBrokerResponder() : null;
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "mqtt" ? new MqttBrokerResponder() : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.MqttClientId, device.TimeoutMilliseconds);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static MqttOptions Options(DeviceConfiguration device)
         => new()
         {
-            ClientId = device.MqttClientId,
-            Username = device.MqttUsername,
-            Password = device.MqttPassword,
-            KeepAliveSeconds = checked((ushort)device.MqttKeepAliveSeconds),
-            CleanSession = device.MqttCleanSession,
-            WillTopic = device.MqttWillTopic,
-            WillPayload = device.MqttWillPayload is null ? null : Encoding.UTF8.GetBytes(device.MqttWillPayload),
-            WillQualityOfService = ParseQos(device.MqttWillQos),
-            WillRetain = device.MqttWillRetain,
-            MaximumPacketSize = device.MqttMaximumPacketSize,
-            AutomaticKeepAlive = device.MqttAutomaticKeepAlive,
-            AutomaticReconnect = device.MqttAutomaticReconnect
+            ClientId = ZeusConfigurationOptions.GetString(device.Options, "mqttClientId"),
+            Username = ZeusConfigurationOptions.GetString(device.Options, "mqttUsername"),
+            Password = ZeusConfigurationOptions.GetString(device.Options, "mqttPassword"),
+            KeepAliveSeconds = checked((ushort)ZeusConfigurationOptions.GetInt32(device.Options, "mqttKeepAliveSeconds", 60)),
+            CleanSession = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttCleanSession", true),
+            WillTopic = ZeusConfigurationOptions.GetString(device.Options, "mqttWillTopic"),
+            WillPayload = ZeusConfigurationOptions.GetString(device.Options, "mqttWillPayload") is { } payload ? Encoding.UTF8.GetBytes(payload) : null,
+            WillQualityOfService = ParseQos(ZeusConfigurationOptions.GetString(device.Options, "mqttWillQos", "0")),
+            WillRetain = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttWillRetain"),
+            MaximumPacketSize = ZeusConfigurationOptions.GetInt32(device.Options, "mqttMaximumPacketSize", 1024 * 1024),
+            AutomaticKeepAlive = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttAutomaticKeepAlive", true),
+            AutomaticReconnect = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttAutomaticReconnect", true)
         };
 
     private static Action<MqttPointMap>? Points(DeviceConfiguration device)
@@ -79,9 +80,10 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var topic = string.IsNullOrWhiteSpace(point.Topic) ? point.Name : point.Topic.Trim();
+                var topic = ZeusConfigurationOptions.GetString(point.Options, "topic");
+                topic = string.IsNullOrWhiteSpace(topic) ? point.Name : topic.Trim();
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-                switch (ZeusConfigurationText.Normalize(point.DataType))
+                switch (ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text")))
                 {
                     case "boolean":
                         map.Boolean(point.Name, topic);
@@ -103,13 +105,13 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
                         break;
                 }
 
-                if (point.Writable)
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }
 
-                map.WithQualityOfService(point.Name, ParseQos(point.MqttQos));
-                map.Retained(point.Name, point.MqttRetain);
+                map.WithQualityOfService(point.Name, ParseQos(ZeusConfigurationOptions.GetString(point.Options, "mqttQos", "0")));
+                map.Retained(point.Name, ZeusConfigurationOptions.GetBoolean(point.Options, "mqttRetain", true));
             }
         };
 

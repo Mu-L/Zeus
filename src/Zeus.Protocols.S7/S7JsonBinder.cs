@@ -14,26 +14,26 @@ public sealed class S7JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        ValidateByte(device.Rack, $"{path}.rack");
-        if (device.Slot is < 0 or > 31)
+        ValidateByte(GetInt32(device, "rack"), $"{path}.options.rack");
+        if (GetInt32(device, "slot", 1) is < 0 or > 31)
         {
-            throw new ZeusException($"{path}.slot 必须介于 0 与 31 之间。");
+            throw new ZeusException($"{path}.options.slot 必须介于 0 与 31 之间。");
         }
 
-        ValidateUInt16(device.LocalTsap, $"{path}.localTsap");
-        if (device.RemoteTsap is { } remoteTsap)
+        ValidateUInt16(GetInt32(device, "localTsap", 0x0100), $"{path}.options.localTsap");
+        if (GetNullableInt32(device, "remoteTsap", path) is { } remoteTsap)
         {
-            ValidateUInt16(remoteTsap, $"{path}.remoteTsap");
+            ValidateUInt16(remoteTsap, $"{path}.options.remoteTsap");
         }
 
-        if (device.RequestedPduLength is < 128 or > 960)
+        if (GetInt32(device, "requestedPduLength", 480) is < 128 or > 960)
         {
-            throw new ZeusException($"{path}.requestedPduLength 必须介于 128 与 960 之间。");
+            throw new ZeusException($"{path}.options.requestedPduLength 必须介于 128 与 960 之间。");
         }
 
-        if (device.TimeoutMilliseconds is <= 0)
+        if (GetNullableInt32(device, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
         ValidatePoints(device.Points, path);
@@ -47,7 +47,7 @@ public sealed class S7JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ApplyDevice(DeviceConfiguration device, ZeusHostBuilder? builder = null, IZeusHost? host = null)
     {
-        var timeout = device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
+        var timeout = ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
         Action<S7PointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
         if (builder is not null)
         {
@@ -60,20 +60,20 @@ public sealed class S7JsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "s7" ? new S7SlaveResponder() : null;
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "s7" ? new S7SlaveResponder() : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.TimeoutMilliseconds, device.Rack, device.Slot, device.LocalTsap, device.RemoteTsap, device.RequestedPduLength);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static S7Options CreateOptions(DeviceConfiguration device)
         => new()
         {
-            Rack = (byte)device.Rack,
-            Slot = (byte)device.Slot,
-            LocalTsap = (ushort)device.LocalTsap,
-            RemoteTsap = device.RemoteTsap is { } remoteTsap ? (ushort)remoteTsap : null,
-            RequestedPduLength = (ushort)device.RequestedPduLength
+            Rack = (byte)GetInt32(device, "rack"),
+            Slot = (byte)GetInt32(device, "slot", 1),
+            LocalTsap = (ushort)GetInt32(device, "localTsap", 0x0100),
+            RemoteTsap = GetNullableInt32(device, "remoteTsap") is { } remoteTsap ? (ushort)remoteTsap : null,
+            RequestedPduLength = (ushort)GetInt32(device, "requestedPduLength", 480)
         };
 
     private static void ValidatePoints(List<PointConfiguration> points, string devicePath)
@@ -89,64 +89,70 @@ public sealed class S7JsonBinder : IZeusJsonBinder
                 throw new ZeusException($"{path}.name「{point.Name}」在同一设备内重复。");
             }
 
-            if (string.IsNullOrWhiteSpace(point.Area))
+            var areaValue = ZeusConfigurationOptions.GetString(point.Options, "area", path: path);
+            if (string.IsNullOrWhiteSpace(areaValue))
             {
-                throw new ZeusException($"{path}.area 必须指定。S7 可选 db、m、i、q。");
+                throw new ZeusException($"{path}.options.area 必须指定。S7 可选 db、m、i、q。");
             }
 
-            var area = ParseArea(point.Area, $"{path}.area");
-            var dataType = ParseDataType(point.DataType, $"{path}.dataType");
-            if (point.Address is < 0 or > 0x1FFFFF)
+            var area = ParseArea(areaValue, $"{path}.options.area");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", path), $"{path}.options.dataType");
+            var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+            if (address is < 0 or > 0x1FFFFF)
             {
-                throw new ZeusException($"{path}.address 必须介于 0 与 2097151 之间。");
+                throw new ZeusException($"{path}.options.address 必须介于 0 与 2097151 之间。");
             }
 
+            var dbNumber = ZeusConfigurationOptions.GetInt32(point.Options, "db", path: path);
             if (area == S7Area.DataBlock)
             {
-                if (point.DbNumber is <= 0 or > ushort.MaxValue)
+                if (dbNumber is <= 0 or > ushort.MaxValue)
                 {
-                    throw new ZeusException($"{path}.db 必须介于 1 与 65535 之间。");
+                    throw new ZeusException($"{path}.options.db 必须介于 1 与 65535 之间。");
                 }
             }
-            else if (point.DbNumber != 0)
+            else if (dbNumber != 0)
             {
-                throw new ZeusException($"{path}.db 只能用于 S7 DB 区。");
+                throw new ZeusException($"{path}.options.db 只能用于 S7 DB 区。");
             }
 
+            var bitOffset = ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path);
             if (dataType == S7DataType.Bool)
             {
-                if (point.BitOffset is < 0 or > 7)
+                if (bitOffset is < 0 or > 7)
                 {
-                    throw new ZeusException($"{path}.bit 必须介于 0 与 7 之间。");
+                    throw new ZeusException($"{path}.options.bit 必须介于 0 与 7 之间。");
                 }
             }
-            else if (point.BitOffset != 0)
+            else if (bitOffset != 0)
             {
-                throw new ZeusException($"{path}.bit 只能用于 S7 bool 点。");
+                throw new ZeusException($"{path}.options.bit 只能用于 S7 bool 点。");
             }
 
-            if (point.Scale is <= 0)
+            var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+            if (scale is <= 0)
             {
-                throw new ZeusException($"{path}.scale 必须大于 0。");
+                throw new ZeusException($"{path}.options.scale 必须大于 0。");
             }
 
             ZeusConfigurationText.ValidatePointAlarms(point, path);
             if (dataType == S7DataType.Bool)
             {
-                if (point.Scale is not null)
+                if (scale is not null)
                 {
-                    throw new ZeusException($"{path} 是 S7 bool 点，不能配置 scale。");
+                    throw new ZeusException($"{path} 是 S7 bool 点，不能配置 options.scale。");
                 }
 
-                if (point.LowAlarmLimit is not null || point.HighAlarmLimit is not null)
+                if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+                    || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
                 {
-                    throw new ZeusException($"{path} 是 S7 bool 点，不能配置 lowAlarmLimit 或 highAlarmLimit。");
+                    throw new ZeusException($"{path} 是 S7 bool 点，不能配置 options.lowAlarmLimit 或 options.highAlarmLimit。");
                 }
             }
 
-            if (point.Writable && area == S7Area.Inputs)
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable", path: path) && area == S7Area.Inputs)
             {
-                throw new ZeusException($"{path}.area 为 I 输入区，该区域只读，不能设置 writable: true。");
+                throw new ZeusException($"{path}.options.area 为 I 输入区，该区域只读，不能设置 options.writable: true。");
             }
         }
     }
@@ -155,24 +161,33 @@ public sealed class S7JsonBinder : IZeusJsonBinder
     {
         foreach (var point in points)
         {
-            var area = ParseArea(point.Area, $"point {point.Name}.area");
-            var dataType = ParseDataType(point.DataType, $"point {point.Name}.dataType");
+            var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"), $"point {point.Name}.options.area");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"), $"point {point.Name}.options.dataType");
             var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-            if (point.Scale is { } scale)
+            var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
+            var dbNumber = ZeusConfigurationOptions.GetInt32(point.Options, "db");
+            var bitOffset = ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+            if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale") is { } scale)
             {
-                map.ScaledPoint(point.Name, area, dataType, point.Address, scale, point.DbNumber, point.BitOffset, alarmLimits);
+                map.ScaledPoint(point.Name, area, dataType, address, scale, dbNumber, bitOffset, alarmLimits);
             }
             else
             {
-                map.Point(point.Name, area, dataType, point.Address, point.DbNumber, point.BitOffset, alarmLimits);
+                map.Point(point.Name, area, dataType, address, dbNumber, bitOffset, alarmLimits);
             }
 
-            if (point.Writable)
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
             {
                 map.Writable(point.Name);
             }
         }
     }
+
+    private static int GetInt32(DeviceConfiguration device, string name, int defaultValue = 0)
+        => ZeusConfigurationOptions.GetInt32(device.Options, name, defaultValue);
+
+    private static int? GetNullableInt32(DeviceConfiguration device, string name, string? path = null)
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, name, path);
 
     private static S7Area ParseArea(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch

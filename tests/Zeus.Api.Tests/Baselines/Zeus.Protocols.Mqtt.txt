@@ -55,9 +55,9 @@ namespace Zeus
         public System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
         public System.Threading.Tasks.Task ConnectAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task PublishTextAsync(string topic, string payload, bool retain = false, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task PublishTextAsync(string topic, string payload, Zeus.MqttQualityOfService qualityOfService, bool retain = false, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task WriteAsync(string pointName, object value, Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public sealed class MqttException : Zeus.ZeusProtocolException

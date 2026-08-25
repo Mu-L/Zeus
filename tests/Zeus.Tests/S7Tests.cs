@@ -108,19 +108,18 @@ public sealed class S7Tests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "plc-link", "type": "virtual", "responder": "s7" }
+                { "name": "plc-link", "type": "virtual", "options": { "responder": "s7" } }
               ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "siemens-s7",
-                  "rack": 0,
-                  "slot": 1,
+                  "options": { "rack": 0, "slot": 1 },
                   "points": [
-                    { "name": "temperature", "area": "db", "db": 1, "address": 0, "dataType": "real" },
-                    { "name": "setpoint", "area": "db", "db": 1, "address": 4, "dataType": "int", "scale": 0.1, "writable": true },
-                    { "name": "running", "area": "m", "address": 10, "bit": 0, "dataType": "bool", "writable": true }
+                    { "name": "temperature", "options": { "area": "db", "db": 1, "address": 0, "dataType": "real" } },
+                    { "name": "setpoint", "options": { "area": "db", "db": 1, "address": 4, "dataType": "int", "scale": 0.1, "writable": true } },
+                    { "name": "running", "options": { "area": "m", "address": 10, "bit": 0, "dataType": "bool", "writable": true } }
                   ]
                 }
               ]
@@ -149,13 +148,13 @@ public sealed class S7Tests
     {
         const string json = """
             {
-              "channels": [ { "name": "plc-link", "type": "virtual", "responder": "s7" } ],
+              "channels": [ { "name": "plc-link", "type": "virtual", "options": { "responder": "s7" } } ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "plc-link",
                   "type": "siemens-s7",
-                  "points": [ { "name": "start", "area": "i", "address": 0, "bit": 0, "dataType": "bool", "writable": true } ]
+                  "points": [ { "name": "start", "options": { "area": "i", "address": 0, "bit": 0, "dataType": "bool", "writable": true } } ]
                 }
               ]
             }

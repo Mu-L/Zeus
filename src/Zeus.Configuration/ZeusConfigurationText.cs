@@ -38,16 +38,19 @@ public static class ZeusConfigurationText
     /// </summary>
     public static void ValidatePointAlarms(PointConfiguration point, string path)
     {
-        ValidateAlarmLimit(point.LowAlarmLimit, $"{path}.lowAlarmLimit");
-        ValidateAlarmLimit(point.HighAlarmLimit, $"{path}.highAlarmLimit");
-        if (point.LowAlarmLimit > point.HighAlarmLimit)
+        var low = ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path);
+        var high = ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path);
+        var deadband = ZeusConfigurationOptions.GetDouble(point.Options, "deadband", 0, path);
+        ValidateAlarmLimit(low, $"{path}.options.lowAlarmLimit");
+        ValidateAlarmLimit(high, $"{path}.options.highAlarmLimit");
+        if (low > high)
         {
-            throw new ZeusException($"{path}.lowAlarmLimit 不能高于 highAlarmLimit。");
+            throw new ZeusException($"{path}.options.lowAlarmLimit 不能高于 highAlarmLimit。");
         }
 
-        if (point.Deadband < 0 || !double.IsFinite(point.Deadband))
+        if (deadband < 0 || !double.IsFinite(deadband))
         {
-            throw new ZeusException($"{path}.deadband 必须是大于或等于 0 的有限数值。");
+            throw new ZeusException($"{path}.options.deadband 必须是大于或等于 0 的有限数值。");
         }
     }
 
@@ -55,15 +58,19 @@ public static class ZeusConfigurationText
     /// 由 JSON 点生成报警限；未配置阈值时返回 <c>null</c>。
     /// </summary>
     public static PointAlarmLimits? CreateAlarmLimits(PointConfiguration point)
-        => point.LowAlarmLimit is not null || point.HighAlarmLimit is not null
+    {
+        var low = ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit");
+        var high = ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit");
+        return low is not null || high is not null
             ? new PointAlarmLimits(
-                point.LowAlarmLimit,
-                point.HighAlarmLimit,
-                point.Deadband,
-                ParseSeverity(point.AlarmSeverity),
-                point.AlarmArea,
-                point.AlarmAssignee)
+                low,
+                high,
+                ZeusConfigurationOptions.GetDouble(point.Options, "deadband"),
+                ParseSeverity(ZeusConfigurationOptions.GetString(point.Options, "alarmSeverity")),
+                ZeusConfigurationOptions.GetString(point.Options, "alarmArea"),
+                ZeusConfigurationOptions.GetString(point.Options, "alarmAssignee"))
             : null;
+    }
 
     /// <summary>
     /// 解析 JSON 中的报警严重等级。省略或空为警告。
@@ -78,32 +85,21 @@ public static class ZeusConfigurationText
             _ => throw new ZeusException($"alarmSeverity「{value}」不受支持。可选 info、warning、alarm、critical。")
         };
 
+    /// <summary>解析通道启动策略。</summary>
+    public static ChannelStartupMode ParseStartupMode(string? value, string path = "startup")
+        => Normalize(value) switch
+        {
+            "" or "required" => ChannelStartupMode.Required,
+            "optional" => ChannelStartupMode.Optional,
+            "degraded" or "degraded-allowed" => ChannelStartupMode.DegradedAllowed,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。可选 required、optional、degraded。")
+        };
+
     /// <summary>
     /// 点表指纹，供热更新判断设备是否需要重建。
     /// </summary>
     public static string PointFingerprint(PointConfiguration point)
         => string.Join(':',
             point.Name,
-            Normalize(point.Table),
-            Normalize(point.DeviceCode),
-            Normalize(point.Area),
-            Normalize(point.Tag),
-            point.Topic,
-            point.Oid,
-            Normalize(point.MqttQos),
-            point.MqttRetain,
-            Normalize(point.DataType),
-            point.DataLength,
-            point.DbNumber,
-            point.Address,
-            point.BitOffset,
-            point.Scale,
-            point.Signed,
-            point.LowAlarmLimit,
-            point.HighAlarmLimit,
-            point.Deadband,
-            Normalize(point.AlarmSeverity),
-            point.AlarmArea,
-            point.AlarmAssignee,
-            point.Writable);
+            ZeusConfigurationOptions.Fingerprint(point.Options));
 }

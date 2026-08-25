@@ -91,6 +91,45 @@ public sealed class PointTableContractTests
     }
 
     /// <summary>
+    /// 短名重复时，订阅应与读取一样要求限定名，避免界面误绑多个设备上的同名点。
+    /// </summary>
+    [Fact]
+    public void PointTable_SubscribeRejectsAmbiguousShortName()
+    {
+        var table = new PointTable();
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
+        table.Register(new PointDefinition("pv", "dryer", PointValueKind.UInt16));
+
+        var error = Assert.Throws<ZeusException>(() => table.Subscribe("pv", (_, _) => { }));
+        Assert.Contains("重复", error.Message, StringComparison.Ordinal);
+
+        using var sub = table.Subscribe("oven.pv", (_, _) => { });
+    }
+
+    /// <summary>
+    /// 点表应保留采集结果的质量、源时间戳，并在失败时保留旧值但标记 Bad。
+    /// </summary>
+    [Fact]
+    public void PointTable_PreservesQualityAndSourceTimestamp()
+    {
+        var table = new PointTable();
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
+        var sampledAt = DateTimeOffset.UtcNow.AddMilliseconds(-150);
+
+        table.Publish(PointReadResult.Success("oven.pv", (ushort)12, sampledAt));
+        var success = table.Get("pv");
+        Assert.Equal(PointQuality.Good, success.Quality);
+        Assert.Equal(sampledAt, success.SourceTimestamp);
+        Assert.True(success.Latency >= TimeSpan.Zero);
+
+        table.Publish(PointReadResult.Failure("oven.pv", "从站超时"));
+        var failure = table.Get("pv");
+        Assert.Equal(PointQuality.Bad, failure.Quality);
+        Assert.Equal((ushort)12, failure.Value);
+        Assert.Equal("从站超时", failure.Error);
+    }
+
+    /// <summary>
     /// TryGetDouble 把原始寄存器和带 scale 的工程值都读成 double。
     /// </summary>
     [Fact]
@@ -163,14 +202,14 @@ public sealed class PointTableContractTests
         const string json = """
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
-              "channels": [ { "name": "bus", "type": "virtual", "responder": "modbus", "unitId": 1, "transport": "rtu" } ],
+              "channels": [ { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "rtu" } } ],
               "devices": [
                 {
                   "name": "pack",
                   "channel": "bus",
                   "type": "modbus-rtu",
                   "points": [
-                    { "name": "current", "table": "holding", "address": 1, "scale": 0.01, "signed": true }
+                    { "name": "current", "options": { "table": "holding", "address": 1, "scale": 0.01, "signed": true } }
                   ]
                 }
               ]

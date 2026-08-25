@@ -74,13 +74,14 @@ public sealed class MewtocolDevice : DeviceBase, IAcquisitionSource, IPointWrite
         => WriteContactWordsAsync(MewtocolContactArea.InternalRelay, wordAddress, values, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var group in GroupConsecutive(_specs))
         {
             try
             {
-                await PublishGroupAsync(table, group, cancellationToken).ConfigureAwait(false);
+                await ReadGroupAsync(results, group, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -91,10 +92,12 @@ public sealed class MewtocolDevice : DeviceBase, IAcquisitionSource, IPointWrite
                 LogAcquisitionFailed(ex, group[0].Name);
                 foreach (var spec in group)
                 {
-                    table.PublishError(Name + "." + spec.Name, ex.Message);
+                    results.Add(PointReadResult.Failure(Name + "." + spec.Name, ex.Message));
                 }
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -152,7 +155,7 @@ public sealed class MewtocolDevice : DeviceBase, IAcquisitionSource, IPointWrite
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _client.DisposeAsync();
 
-    private async Task PublishGroupAsync(IPointTableWriter table, IReadOnlyList<MewtocolPointSpec> group, CancellationToken cancellationToken)
+    private async Task ReadGroupAsync(List<PointReadResult> results, IReadOnlyList<MewtocolPointSpec> group, CancellationToken cancellationToken)
     {
         var first = group[0];
         var lastAddress = group.Max(spec => spec.Address + spec.WordCount - 1);
@@ -161,14 +164,14 @@ public sealed class MewtocolDevice : DeviceBase, IAcquisitionSource, IPointWrite
         foreach (var spec in group)
         {
             var offset = spec.Address - first.Address;
-            table.Publish(
+            results.Add(PointReadResult.Success(
                 Name + "." + spec.Name,
                 MewtocolCodec.DecodeValue(
                     spec.DataType,
                     words.Skip(offset).Take(spec.WordCount).ToArray(),
                     spec.BitOffset,
                     spec.Scale,
-                    _client.Options.WordOrder));
+                    _client.Options.WordOrder)));
         }
     }
 

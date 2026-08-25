@@ -12,9 +12,9 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
     }
 
@@ -37,24 +37,24 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "dlt645"
-            ? new Dlt645SlaveResponder(channel.MeterAddress)
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "dlt645"
+            ? new Dlt645SlaveResponder(ZeusConfigurationOptions.GetString(channel.Options, "meterAddress", "000000000001")!)
             : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.MeterAddress, device.WakeUpPreambleCount, device.TimeoutMilliseconds);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static Dlt645Options Options(DeviceConfiguration device)
         => new()
         {
-            MeterAddress = device.MeterAddress.Trim(),
-            WakeUpPreambleCount = device.WakeUpPreambleCount,
-            Password = device.Password.Trim(),
-            OperatorCode = device.OperatorCode.Trim()
+            MeterAddress = ZeusConfigurationOptions.GetString(device.Options, "meterAddress", "000000000001")!.Trim(),
+            WakeUpPreambleCount = ZeusConfigurationOptions.GetInt32(device.Options, "wakeUpPreambleCount", 4),
+            Password = ZeusConfigurationOptions.GetString(device.Options, "password", "00000000")!.Trim(),
+            OperatorCode = ZeusConfigurationOptions.GetString(device.Options, "operatorCode", "00000000")!.Trim()
         };
 
     private static Action<Dlt645PointMap>? Points(DeviceConfiguration device)
@@ -62,18 +62,19 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var dataType = ZeusConfigurationText.Normalize(point.DataType);
-                var id = checked((uint)point.Address);
+                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd"));
+                var id = checked((uint)ZeusConfigurationOptions.GetInt32(point.Options, "address"));
+                var dataLength = ZeusConfigurationOptions.GetInt32(point.Options, "dataLength", 4);
                 if (dataType is "raw")
                 {
-                    map.RawBytes(point.Name, id, point.DataLength);
+                    map.RawBytes(point.Name, id, dataLength);
                 }
                 else
                 {
-                    map.Bcd(point.Name, id, point.DataLength, point.Scale ?? 0.01, ZeusConfigurationText.CreateAlarmLimits(point));
+                    map.Bcd(point.Name, id, dataLength, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale") ?? 0.01, ZeusConfigurationText.CreateAlarmLimits(point));
                 }
 
-                if (point.Writable)
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }

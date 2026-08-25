@@ -222,7 +222,7 @@ internal sealed class AcquisitionLoopService : BackgroundService
                 timeoutCts.CancelAfter(_options.SourceTimeout);
                 try
                 {
-                    await source.PollAsync(_table, timeoutCts.Token).ConfigureAwait(false);
+                    await PublishResultsAsync(await source.ReadAsync(timeoutCts.Token).ConfigureAwait(false)).ConfigureAwait(false);
                     return;
                 }
                 catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
@@ -232,7 +232,7 @@ internal sealed class AcquisitionLoopService : BackgroundService
                 }
             }
 
-            await source.PollAsync(_table, stoppingToken).ConfigureAwait(false);
+            await PublishResultsAsync(await source.ReadAsync(stoppingToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -253,6 +253,16 @@ internal sealed class AcquisitionLoopService : BackgroundService
                 _table.PublishError(point.QualifiedName, ex.Message);
             }
         }
+    }
+
+    private Task PublishResultsAsync(IReadOnlyList<PointReadResult> results)
+    {
+        foreach (var result in results)
+        {
+            _table.Publish(result);
+        }
+
+        return Task.CompletedTask;
     }
 
     private IReadOnlyList<IAcquisitionSource> SnapshotSources()

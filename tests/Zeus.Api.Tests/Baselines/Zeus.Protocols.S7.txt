@@ -46,7 +46,7 @@ namespace Zeus
         public Zeus.S7Client Client { get; }
         public System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> ReadBoolAsync(Zeus.S7Area area, int byteOffset, int bitOffset, int dbNumber = 0, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<byte> ReadByteAsync(Zeus.S7Area area, int byteOffset, int dbNumber = 0, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<int> ReadDIntAsync(Zeus.S7Area area, int byteOffset, int dbNumber = 0, System.Threading.CancellationToken cancellationToken = default) { }

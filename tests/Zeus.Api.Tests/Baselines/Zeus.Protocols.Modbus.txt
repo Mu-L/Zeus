@@ -33,7 +33,7 @@ namespace Zeus
         public System.Threading.Tasks.Task<ushort> DiagnosticsReturnQueryDataAsync(ushort data, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
         public System.Threading.Tasks.Task MaskWriteRegisterAsync(ushort address, ushort andMask, ushort orMask, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool[]> ReadCoilsAsync(ushort address, ushort quantity, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Zeus.ModbusDeviceIdentification> ReadDeviceIdentificationAsync(byte deviceIdCode = 1, byte objectId = 0, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool[]> ReadDiscreteInputsAsync(ushort address, ushort quantity, System.Threading.CancellationToken cancellationToken = default) { }

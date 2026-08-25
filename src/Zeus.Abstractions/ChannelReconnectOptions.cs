@@ -22,4 +22,31 @@ public sealed class ChannelReconnectOptions
     /// 连续失败时把等待时间乘以该系数。必须大于或等于 1，默认 2。
     /// </summary>
     public double BackoffMultiplier { get; set; } = 2;
+
+    /// <summary>
+    /// 最大连续重连次数。0 表示不限制。
+    /// </summary>
+    public int MaxAttempts { get; set; }
+
+    /// <summary>
+    /// 延迟抖动比例，0 表示关闭。0.2 表示在基础延迟上下浮动 20%。
+    /// </summary>
+    public double JitterRatio { get; set; }
+
+    /// <summary>
+    /// 达到最大尝试次数后的熔断等待时间。0 表示直接停止自动重连。
+    /// </summary>
+    public TimeSpan CircuitBreakDuration { get; set; }
+
+    /// <summary>自动重连调度状态变化。</summary>
+    public event EventHandler<ReconnectStateChangedEventArgs>? StateChanged;
+
+    /// <summary>
+    /// 发布重连状态。由宿主重连服务调用。
+    /// </summary>
+    public void PublishState(ReconnectStateChangedEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        StateChanged?.Invoke(this, args);
+    }
 }

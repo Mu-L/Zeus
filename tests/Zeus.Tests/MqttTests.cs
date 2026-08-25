@@ -159,16 +159,16 @@ public sealed class MqttTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "mqtt-link", "type": "virtual", "responder": "mqtt" }
+                { "name": "mqtt-link", "type": "virtual", "options": { "responder": "mqtt" } }
               ],
               "devices": [
                 {
                   "name": "gateway",
                   "channel": "mqtt-link",
                   "type": "mqtt",
-                  "mqttClientId": "zeus-json-test",
+                  "options": { "mqttClientId": "zeus-json-test" },
                   "points": [
-                    { "name": "setpoint", "topic": "factory/setpoint", "dataType": "double", "writable": true }
+                    { "name": "setpoint", "options": { "topic": "factory/setpoint", "dataType": "double", "writable": true } }
                   ]
                 }
               ]
@@ -189,12 +189,12 @@ public sealed class MqttTests
     {
         const string json = """
             {
-              "channels": [{ "name": "mqtt-link", "type": "virtual", "responder": "mqtt" }],
+              "channels": [{ "name": "mqtt-link", "type": "virtual", "options": { "responder": "mqtt" } }],
               "devices": [{
                 "name": "gateway",
                 "channel": "mqtt-link",
                 "type": "mqtt",
-                "points": [{ "name": "bad", "topic": "factory/+", "dataType": "text" }]
+                "points": [{ "name": "bad", "options": { "topic": "factory/+", "dataType": "text" } }]
               }]
             }
             """;

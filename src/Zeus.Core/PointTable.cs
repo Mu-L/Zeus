@@ -107,7 +107,7 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             throw new ZeusException("订阅点名不能为空。");
         }
 
-        var pattern = name.Trim();
+        var pattern = ResolveSubscriptionPattern(name);
         lock (_gate)
         {
             _subscriptions.Add((pattern, handler));
@@ -172,7 +172,14 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 return;
             }
 
-            _byQualified[definition.QualifiedName] = new PointSnapshot(definition, null, null, null);
+            _byQualified[definition.QualifiedName] = new PointSnapshot(
+                definition,
+                null,
+                null,
+                null,
+                previousAlarmState: null,
+                PointQuality.Unknown,
+                sourceTimestamp: null);
             _order.Add(definition.QualifiedName);
 
             if (_ambiguousShortNames.Contains(definition.Name))
@@ -194,6 +201,29 @@ public sealed class PointTable : IPointTable, IPointTableWriter
 
     /// <inheritdoc />
     public void Publish(string qualifiedName, object? value)
+        => Publish(qualifiedName, value, sourceTimestamp: null, PointQuality.Good);
+
+    /// <summary>
+    /// 发布采集结果，保留协议层给出的质量和源时间戳。
+    /// </summary>
+    /// <param name="result">采集结果。</param>
+    internal void Publish(PointReadResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.IsSuccess)
+        {
+            Publish(result.QualifiedName, result.Value, result.SourceTimestamp, result.Quality);
+            return;
+        }
+
+        PublishError(result.QualifiedName, result.Error!, result.SourceTimestamp, result.Quality);
+    }
+
+    private void Publish(
+        string qualifiedName,
+        object? value,
+        DateTimeOffset? sourceTimestamp,
+        PointQuality quality)
     {
         PointSnapshot? previous;
         PointSnapshot current;
@@ -204,13 +234,21 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 throw new ZeusException($"无法写入未登记的点 {qualifiedName}。请先在设备上声明点表。");
             }
 
-            if (existing.Error is null && Equals(existing.Value, value))
+            if (existing.Error is null && Equals(existing.Value, value) && existing.Quality == quality)
             {
                 return;
             }
 
             previous = existing;
-            current = new PointSnapshot(existing.Definition, value, DateTimeOffset.Now, null, existing.AlarmState);
+            var receivedAt = DateTimeOffset.UtcNow;
+            current = new PointSnapshot(
+                existing.Definition,
+                value,
+                receivedAt,
+                null,
+                existing.AlarmState,
+                quality,
+                sourceTimestamp ?? receivedAt);
             _byQualified[qualifiedName] = current;
         }
 
@@ -219,6 +257,13 @@ public sealed class PointTable : IPointTable, IPointTableWriter
 
     /// <inheritdoc />
     public void PublishError(string qualifiedName, string error)
+        => PublishError(qualifiedName, error, sourceTimestamp: null, PointQuality.Bad);
+
+    private void PublishError(
+        string qualifiedName,
+        string error,
+        DateTimeOffset? sourceTimestamp,
+        PointQuality quality)
     {
         if (string.IsNullOrWhiteSpace(error))
         {
@@ -234,13 +279,20 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 throw new ZeusException($"无法写入未登记的点 {qualifiedName}。请先在设备上声明点表。");
             }
 
-            if (string.Equals(existing.Error, error, StringComparison.Ordinal))
+            if (string.Equals(existing.Error, error, StringComparison.Ordinal) && existing.Quality == quality)
             {
                 return;
             }
 
             previous = existing;
-            current = new PointSnapshot(existing.Definition, existing.Value, existing.UpdatedAt, error, existing.AlarmState);
+            current = new PointSnapshot(
+                existing.Definition,
+                existing.Value,
+                existing.UpdatedAt,
+                error,
+                existing.AlarmState,
+                quality,
+                sourceTimestamp ?? existing.SourceTimestamp);
             _byQualified[qualifiedName] = current;
         }
 
@@ -411,6 +463,16 @@ public sealed class PointTable : IPointTable, IPointTableWriter
         return false;
     }
 
+    private string ResolveSubscriptionPattern(string name)
+    {
+        if (TryResolveQualifiedName(name, out var qualifiedName) && qualifiedName is not null)
+        {
+            return qualifiedName;
+        }
+
+        return name.Trim();
+    }
+
     /// <inheritdoc />
     public async Task WriteAsync(string name, object value, CancellationToken cancellationToken = default)
     {
@@ -547,8 +609,15 @@ public sealed class PointTable : IPointTable, IPointTableWriter
     }
 
     private static bool MatchesSubscription(string pattern, PointSnapshot snapshot)
-        => snapshot.QualifiedName.Equals(pattern, StringComparison.OrdinalIgnoreCase)
-            || snapshot.Definition.Name.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+    {
+        if (snapshot.QualifiedName.Equals(pattern, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return !pattern.Contains('.', StringComparison.Ordinal)
+            && snapshot.Definition.Name.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+    }
 
     private ZeusException CreateMissingException(string name)
     {

@@ -8,15 +8,15 @@ public sealed class MewtocolClient : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly MewtocolOptions _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
 
     /// <summary>创建 MEWTOCOL 客户端并订阅通道。</summary>
     public MewtocolClient(IChannel channel, MewtocolOptions? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _options = CopyOptions(options ?? new MewtocolOptions());
         ValidateStationNumber(_options.StationNumber);
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -36,9 +36,9 @@ public sealed class MewtocolClient : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             await _channel.WriteAsync(MewtocolCodec.EncodeRequest(_options.StationNumber, command, text), cancellationToken).ConfigureAwait(false);
@@ -134,7 +134,6 @@ public sealed class MewtocolClient : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -146,20 +145,21 @@ public sealed class MewtocolClient : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                if (MewtocolCodec.TryDecodeResponse(_buffer, out var response, out var consumed))
+                if (MewtocolCodec.TryDecodeResponse(_receive.Bytes, out var response, out var consumed))
                 {
-                    _buffer.RemoveRange(0, consumed);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     return response;
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -170,35 +170,16 @@ public sealed class MewtocolClient : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
-            {
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
-                    $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 MEWTOCOL 请求已取消。"));
-                _dataPulse = null;
-            }
+            _receive.CancelPending(new ZeusProtocolException(
+                $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 MEWTOCOL 请求已取消。"));
         }
     }
-
     private static MewtocolOptions CopyOptions(MewtocolOptions source)
         => new()
         {

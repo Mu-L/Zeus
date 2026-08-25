@@ -12,6 +12,7 @@ namespace Zeus
     {
         protected ChannelBase(string name, Microsoft.Extensions.Logging.ILogger? logger) { }
         public string Name { get; }
+        public Zeus.ChannelStartupMode StartupMode { get; set; }
         public Zeus.ChannelState State { get; }
         public event System.EventHandler<Zeus.ChannelDataReceivedEventArgs>? DataReceived;
         public event System.EventHandler<Zeus.ChannelTraceEventArgs>? PacketTraced;
@@ -39,6 +40,15 @@ namespace Zeus
         public Zeus.IChannel Get(string name) { }
         public System.Threading.Tasks.Task RemoveAsync(string name, System.Threading.CancellationToken cancellationToken = default) { }
         public bool TryGet(string name, out Zeus.IChannel? channel) { }
+    }
+    public sealed class ChannelTransactionCoordinator
+    {
+        public Zeus.IChannel Channel { get; }
+        public void Release() { }
+        public System.Threading.Tasks.Task WaitAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> WaitAsync(int millisecondsTimeout, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> WaitAsync(System.TimeSpan timeout, System.Threading.CancellationToken cancellationToken = default) { }
+        public static Zeus.ChannelTransactionCoordinator For(Zeus.IChannel channel) { }
     }
     public abstract class DeviceBase : Zeus.IDevice
     {

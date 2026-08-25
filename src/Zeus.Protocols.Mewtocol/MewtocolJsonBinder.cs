@@ -12,23 +12,25 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
-        if (device.UnitId is < 1 or > 99)
+        var unitId = ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1, path);
+        if (unitId is < 1 or > 99)
         {
-            throw new ZeusException($"{path}.unitId 必须介于 1 与 99 之间。");
+            throw new ZeusException($"{path}.options.unitId 必须介于 1 与 99 之间。");
         }
 
-        if (device.TimeoutMilliseconds is <= 0)
+        if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
-            throw new ZeusException($"{path}.timeoutMilliseconds 必须大于 0。");
+            throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
     }
 
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
-        if (channel.UnitId is < 1 or > 99)
+        var unitId = ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1, path);
+        if (unitId is < 1 or > 99)
         {
-            throw new ZeusException($"{path}.unitId 必须介于 1 与 99 之间。");
+            throw new ZeusException($"{path}.options.unitId 必须介于 1 与 99 之间。");
         }
     }
 
@@ -46,27 +48,30 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
 
     /// <inheritdoc />
     public IVirtualResponder? CreateResponder(ChannelConfiguration channel)
-        => ZeusConfigurationText.Normalize(channel.Responder) == "mewtocol"
-            ? new MewtocolSlaveResponder(channel.UnitId)
+        => ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(channel.Options, "responder")) == "mewtocol"
+            ? new MewtocolSlaveResponder((byte)ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1))
             : null;
 
     /// <inheritdoc />
     public string DeviceFingerprint(DeviceConfiguration device)
-        => string.Join('|', device.UnitId, device.TimeoutMilliseconds);
+        => ZeusConfigurationOptions.Fingerprint(device.Options);
 
     private static TimeSpan? Timeout(DeviceConfiguration device)
-        => device.TimeoutMilliseconds is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
+        => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static MewtocolOptions Options(DeviceConfiguration device)
-        => new() { StationNumber = device.UnitId };
+        => new() { StationNumber = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1) };
 
     private static Action<MewtocolPointMap>? Points(DeviceConfiguration device)
         => device.Points.Count == 0 ? null : map =>
         {
             foreach (var point in device.Points)
             {
-                var area = ZeusConfigurationText.Normalize(point.Area);
-                var dataType = ZeusConfigurationText.Normalize(point.DataType);
+                var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt"));
+                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
+                var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
+                var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+                var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 if (area is "x" or "y" or "r" or "l")
                 {
                     var contact = area switch
@@ -78,15 +83,15 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                     };
                     if (dataType is "bit")
                     {
-                        map.Bit(point.Name, contact, point.Address, (byte)point.BitOffset);
+                        map.Bit(point.Name, contact, address, bitOffset);
                     }
-                    else if (point.Scale is { } scale)
+                    else if (scale is { } wordScale)
                     {
-                        map.Word(point.Name, contact, point.Address, scale);
+                        map.Word(point.Name, contact, address, wordScale);
                     }
                     else
                     {
-                        map.Word(point.Name, contact, point.Address);
+                        map.Word(point.Name, contact, address);
                     }
                 }
                 else
@@ -99,19 +104,19 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                     };
                     if (dataType is "bit")
                     {
-                        map.Bit(point.Name, data, point.Address, (byte)point.BitOffset);
+                        map.Bit(point.Name, data, address, bitOffset);
                     }
-                    else if (point.Scale is { } scale)
+                    else if (scale is { } dataScale)
                     {
-                        map.Word(point.Name, data, point.Address, scale);
+                        map.Word(point.Name, data, address, dataScale);
                     }
                     else
                     {
-                        map.Word(point.Name, data, point.Address);
+                        map.Word(point.Name, data, address);
                     }
                 }
 
-                if (point.Writable)
+                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
                     map.Writable(point.Name);
                 }

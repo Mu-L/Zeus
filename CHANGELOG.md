@@ -9,6 +9,7 @@
 - 模板：新增 `Zeus.Templates`（`zeus-console` / `zeus-winforms` / `zeus-wpf` / `zeus-modbus`）。控制台引用 `Zeus.Communications`；JSON 工程再加 `Zeus.Configuration`；桌面再加 `Zeus.Presentation.WinForms` / `Zeus.Presentation.Wpf`
 - 界面：`host.Bind(dispatcher)` 只传一次调度器，再用 `Channel` / `Point`；不必每个点重复传 `dispatcher`
 - JSON Schema：新增 `https://docs.greekmythology.cn/schemas/zeus.json`，并随 `Zeus.Configuration` 打包，编辑器可补全通道、设备和点字段
+- JSON 配置：通道、设备和点位根层只保留结构字段；端口、从站地址、点位地址、缩放、写回和报警等协议参数统一放进各自 `options`
 - 报警：`PointAlarmSeverity`；限值可带区域与默认责任人；`Assign` / `Shelve` / `Unshelve` / `Suppress` / `Unsuppress`
 - JSON：`alarmSeverity`、`alarmArea`、`alarmAssignee`
 - 界面：`SynchronizationContextUiDispatcher`、`WpfUiDispatcher.Current`、`PointTableBindingSource`；ViewModel 不必再拿控件取 Dispatcher
@@ -30,6 +31,7 @@
 - EtherNet/IP：删除 `AddAllenBradleyEtherNetIp`，统一使用 `AddEtherNetIp`
 - Omron FINS：删除 `AddOmronFinsUdp` / `AddOmronFinsTcp`，统一使用 `AddOmronFins(..., FinsTransport)`；JSON 设备类型改为 `omron-fins`，用 `transport`（`udp` / `tcp`）选择封装，不再接受 `omron-fins-udp` / `omron-fins-tcp`
 - JSON：`tcp-server` / `udp-server` 只认 `localPort`，不再把 `port` 当作监听端口
+- JSON：不再兼容旧顶层协议字段，例如 `host`、`portName`、`unitId`、`address`、`scale`、`writable` 必须迁入对应对象的 `options`
 - 桌面：删除 `UiHostAttachMode` 与 `AttachZeus(..., mode)`；不绑窗口请用 `host.AttachManually()`
 - 配置：删除 `ReloadAcquisition`；改间隔也走 `ReloadAsync`
 - 虚拟从站：`IVirtualResponder` 只保留 `RespondAsync`

@@ -78,17 +78,17 @@ public sealed class MewtocolTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "mewtocol", "type": "virtual", "responder": "mewtocol", "unitId": 1 }
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
               ],
               "devices": [
                 {
                   "name": "plc",
                   "channel": "mewtocol",
                   "type": "panasonic-mewtocol",
-                  "unitId": 1,
+                  "options": { "unitId": 1 },
                   "points": [
-                    { "name": "temperature", "area": "dt", "address": 100, "dataType": "word", "scale": 0.1, "writable": true },
-                    { "name": "running", "area": "r", "address": 10, "bit": 0, "dataType": "bit", "writable": true }
+                    { "name": "temperature", "options": { "area": "dt", "address": 100, "dataType": "word", "scale": 0.1, "writable": true } },
+                    { "name": "running", "options": { "area": "r", "address": 10, "bit": 0, "dataType": "bit", "writable": true } }
                   ]
                 }
               ]

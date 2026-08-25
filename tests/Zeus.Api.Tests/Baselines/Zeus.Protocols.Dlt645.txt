@@ -22,7 +22,7 @@ namespace Zeus
         public Zeus.Dlt645Client Client { get; }
         public System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
         public System.Threading.Tasks.ValueTask DisposeAsync() { }
-        public System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<double> ReadBcdAsync(uint dataIdentifier, int byteLength, double scale, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<byte[]> ReadDataAsync(uint dataIdentifier, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task WriteAsync(string pointName, object value, Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default) { }

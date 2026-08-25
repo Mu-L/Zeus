@@ -11,9 +11,14 @@ namespace Zeus
     {
         public ChannelReconnectOptions() { }
         public double BackoffMultiplier { get; set; }
+        public System.TimeSpan CircuitBreakDuration { get; set; }
         public bool Enabled { get; set; }
         public System.TimeSpan InitialDelay { get; set; }
+        public double JitterRatio { get; set; }
+        public int MaxAttempts { get; set; }
         public System.TimeSpan MaxDelay { get; set; }
+        public event System.EventHandler<Zeus.ReconnectStateChangedEventArgs>? StateChanged;
+        public void PublishState(Zeus.ReconnectStateChangedEventArgs args) { }
     }
     public enum ChannelRegistryChange
     {
@@ -25,6 +30,12 @@ namespace Zeus
         public ChannelRegistryChangedEventArgs(Zeus.ChannelRegistryChange change, Zeus.IChannel channel) { }
         public Zeus.ChannelRegistryChange Change { get; }
         public Zeus.IChannel Channel { get; }
+    }
+    public enum ChannelStartupMode
+    {
+        Required = 0,
+        Optional = 1,
+        DegradedAllowed = 2,
     }
     public enum ChannelState
     {
@@ -92,11 +103,12 @@ namespace Zeus
     {
         string Name { get; }
         System.Collections.Generic.IReadOnlyList<Zeus.PointDefinition> Points { get; }
-        System.Threading.Tasks.Task PollAsync(Zeus.IPointTableWriter table, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Zeus.PointReadResult>> ReadAsync(System.Threading.CancellationToken cancellationToken = default);
     }
     public interface IChannel : System.IAsyncDisposable
     {
         string Name { get; }
+        Zeus.ChannelStartupMode StartupMode { get; set; }
         Zeus.ChannelState State { get; }
         event System.EventHandler<Zeus.ChannelDataReceivedEventArgs>? DataReceived;
         event System.EventHandler<Zeus.ChannelTraceEventArgs>? PacketTraced;
@@ -293,15 +305,37 @@ namespace Zeus
         public string QualifiedName { get; }
         public bool Writable { get; }
     }
+    public enum PointQuality
+    {
+        Unknown = 0,
+        Good = 1,
+        Bad = 2,
+        Stale = 3,
+    }
+    public sealed class PointReadResult
+    {
+        public string? Error { get; }
+        public bool IsSuccess { get; }
+        public string QualifiedName { get; }
+        public Zeus.PointQuality Quality { get; }
+        public System.DateTimeOffset? SourceTimestamp { get; }
+        public object? Value { get; }
+        public static Zeus.PointReadResult Failure(string qualifiedName, string error, System.DateTimeOffset? sourceTimestamp = default, Zeus.PointQuality quality = 2) { }
+        public static Zeus.PointReadResult Success(string qualifiedName, object? value, System.DateTimeOffset? sourceTimestamp = default, Zeus.PointQuality quality = 1) { }
+    }
     public sealed class PointSnapshot
     {
         public PointSnapshot(Zeus.PointDefinition definition, object? value, System.DateTimeOffset? updatedAt, string? error) { }
         public PointSnapshot(Zeus.PointDefinition definition, object? value, System.DateTimeOffset? updatedAt, string? error, Zeus.PointAlarmState? previousAlarmState) { }
+        public PointSnapshot(Zeus.PointDefinition definition, object? value, System.DateTimeOffset? updatedAt, string? error, Zeus.PointAlarmState? previousAlarmState, Zeus.PointQuality quality, System.DateTimeOffset? sourceTimestamp) { }
         public Zeus.PointAlarmState AlarmState { get; }
         public Zeus.PointDefinition Definition { get; }
         public string? Error { get; }
         public bool IsAlarmed { get; }
+        public System.TimeSpan? Latency { get; }
         public string QualifiedName { get; }
+        public Zeus.PointQuality Quality { get; }
+        public System.DateTimeOffset? SourceTimestamp { get; }
         public System.DateTimeOffset? UpdatedAt { get; }
         public object? Value { get; }
         public bool TryGetDouble(out double number) { }
@@ -316,6 +350,24 @@ namespace Zeus
         Boolean = 1,
         Double = 2,
         Object = 3,
+    }
+    public enum ReconnectState
+    {
+        Scheduled = 0,
+        Succeeded = 1,
+        Failed = 2,
+        GaveUp = 3,
+        CircuitOpen = 4,
+        Cancelled = 5,
+    }
+    public sealed class ReconnectStateChangedEventArgs : System.EventArgs
+    {
+        public ReconnectStateChangedEventArgs(string channelName, Zeus.ReconnectState state, int attempt, System.TimeSpan? delay = default, System.Exception? error = null) { }
+        public int Attempt { get; }
+        public string ChannelName { get; }
+        public System.TimeSpan? Delay { get; }
+        public System.Exception? Error { get; }
+        public Zeus.ReconnectState State { get; }
     }
     public sealed class ZeusChannelException : Zeus.ZeusException
     {

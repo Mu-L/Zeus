@@ -87,7 +87,7 @@ public sealed class HostLoggingTests
     }
 
     /// <summary>
-    /// 通道打开失败必须使用 ChannelOpenFailed EventId，宿主仍能启动。
+    /// 可选通道打开失败必须使用 ChannelOpenFailed EventId，宿主仍能启动。
     /// </summary>
     [Fact]
     public async Task Host_LogsChannelOpenFailedWithEventId()
@@ -99,12 +99,32 @@ public sealed class HostLoggingTests
             builder.Logging.SetMinimumLevel(LogLevel.Debug);
             builder.Logging.AddProvider(provider);
             builder.AddReconnect(options => options.Enabled = false);
-            builder.Register((_, channels, _) => channels.Add(new FailingOpenChannel("broken")));
+            builder.Register((_, channels, _) => channels.Add(new FailingOpenChannel("broken")
+            {
+                StartupMode = ChannelStartupMode.Optional
+            }));
         });
 
         await host.StartAsync();
         Assert.True(host.IsRunning);
         Assert.Contains(provider.Logger.Entries, entry => entry.EventId == ZeusLogEvents.ChannelOpenFailed);
+    }
+
+    /// <summary>
+    /// 必需通道打开失败时，宿主应中止启动而不是静默降级。
+    /// </summary>
+    [Fact]
+    public async Task Host_FailsStartWhenRequiredChannelCannotOpen()
+    {
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddReconnect(options => options.Enabled = false);
+            builder.Register((_, channels, _) => channels.Add(new FailingOpenChannel("broken")));
+        });
+
+        var error = await Assert.ThrowsAsync<ZeusException>(() => host.StartAsync());
+        Assert.Contains("必需通道", error.Message, StringComparison.Ordinal);
+        Assert.False(host.IsRunning);
     }
 
     /// <summary>

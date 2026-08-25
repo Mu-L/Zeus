@@ -16,6 +16,7 @@ public static class ZeusConfigurationLoader
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
@@ -24,6 +25,14 @@ public static class ZeusConfigurationLoader
     /// </summary>
     /// <param name="path">JSON 文件路径。</param>
     public static ZeusAppConfiguration LoadFile(string path)
+        => LoadFile(path, null);
+
+    /// <summary>
+    /// 从磁盘读取配置，并使用指定绑定目录校验协议类型。
+    /// </summary>
+    /// <param name="path">JSON 文件路径。</param>
+    /// <param name="registry">协议绑定目录。为 <c>null</c> 时使用全局探测目录。</param>
+    public static ZeusAppConfiguration LoadFile(string path, IZeusJsonBinderRegistry? registry)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -46,7 +55,7 @@ public static class ZeusConfigurationLoader
             throw new ZeusException($"无法读取配置文件 {fullPath}：{ex.Message}", ex);
         }
 
-        return LoadJson(json, fullPath);
+        return LoadJson(json, fullPath, registry);
     }
 
     /// <summary>
@@ -55,6 +64,15 @@ public static class ZeusConfigurationLoader
     /// <param name="json">配置正文。</param>
     /// <param name="sourceName">用于错误消息的来源名，例如文件路径或「内存」。</param>
     public static ZeusAppConfiguration LoadJson(string json, string sourceName = "配置")
+        => LoadJson(json, sourceName, null);
+
+    /// <summary>
+    /// 从 JSON 文本读取配置，并使用指定绑定目录校验协议类型。
+    /// </summary>
+    /// <param name="json">配置正文。</param>
+    /// <param name="sourceName">用于错误消息的来源名，例如文件路径或「内存」。</param>
+    /// <param name="registry">协议绑定目录。为 <c>null</c> 时使用全局探测目录。</param>
+    public static ZeusAppConfiguration LoadJson(string json, string sourceName, IZeusJsonBinderRegistry? registry)
     {
         ZeusAppConfiguration? document;
         try
@@ -73,7 +91,7 @@ public static class ZeusConfigurationLoader
             throw new ZeusException($"{sourceName} 解析结果为空。");
         }
 
-        Validate(document, sourceName);
+        Validate(document, sourceName, registry);
         return document;
     }
 
@@ -83,6 +101,15 @@ public static class ZeusConfigurationLoader
     /// <param name="document">已反序列化的配置。</param>
     /// <param name="sourceName">来源名。</param>
     public static void Validate(ZeusAppConfiguration document, string sourceName = "配置")
+        => Validate(document, sourceName, null);
+
+    /// <summary>
+    /// 校验必填项、名称唯一性与通道引用。协议字段交给已登记的 JSON 绑定。
+    /// </summary>
+    /// <param name="document">已反序列化的配置。</param>
+    /// <param name="sourceName">来源名。</param>
+    /// <param name="registry">协议绑定目录。为 <c>null</c> 时使用全局探测目录。</param>
+    public static void Validate(ZeusAppConfiguration document, string sourceName, IZeusJsonBinderRegistry? registry)
     {
         ArgumentNullException.ThrowIfNull(document);
         if (document.Acquisition.IntervalMilliseconds <= 0)
@@ -105,6 +132,21 @@ public static class ZeusConfigurationLoader
             throw new ZeusException($"{sourceName} 中 reconnect.backoffMultiplier 必须大于或等于 1。");
         }
 
+        if (document.Reconnect.MaxAttempts < 0)
+        {
+            throw new ZeusException($"{sourceName} 中 reconnect.maxAttempts 不能为负数。");
+        }
+
+        if (document.Reconnect.JitterRatio < 0 || !double.IsFinite(document.Reconnect.JitterRatio))
+        {
+            throw new ZeusException($"{sourceName} 中 reconnect.jitterRatio 必须是大于或等于 0 的有限数值。");
+        }
+
+        if (document.Reconnect.CircuitBreakMilliseconds < 0)
+        {
+            throw new ZeusException($"{sourceName} 中 reconnect.circuitBreakMilliseconds 不能为负数。");
+        }
+
         if (document.Acquisition.SourceTimeoutMilliseconds < 0)
         {
             throw new ZeusException($"{sourceName} 中 acquisition.sourceTimeoutMilliseconds 不能为负数。");
@@ -124,17 +166,17 @@ public static class ZeusConfigurationLoader
             switch (ZeusConfigurationText.Normalize(channel.Type))
             {
                 case "virtual":
-                    ValidateVirtual(channel, path);
+                    ValidateVirtual(channel, path, registry);
                     break;
                 case "serial":
-                    if (string.IsNullOrWhiteSpace(channel.PortName))
+                    if (string.IsNullOrWhiteSpace(ZeusConfigurationOptions.GetString(channel.Options, "portName", path: path)))
                     {
-                        throw new ZeusException($"{path} 类型为 serial 时必须提供 portName，例如 COM3。");
+                        throw new ZeusException($"{path} 类型为 serial 时必须提供 options.portName，例如 COM3。");
                     }
 
-                    if (channel.BaudRate <= 0)
+                    if (ZeusConfigurationOptions.GetInt32(channel.Options, "baudRate", 115200, path) <= 0)
                     {
-                        throw new ZeusException($"{path}.baudRate 必须大于 0。");
+                        throw new ZeusException($"{path}.options.baudRate 必须大于 0。");
                     }
 
                     break;
@@ -143,9 +185,10 @@ public static class ZeusConfigurationLoader
                     break;
                 case "udp":
                     ValidateNetworkChannel(channel, path, "udp");
-                    if (channel.LocalPort is < 0 or > 65535)
+                    var localPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort", 0, path);
+                    if (localPort is < 0 or > 65535)
                     {
-                        throw new ZeusException($"{path}.localPort 必须介于 0 与 65535 之间，0 表示自动分配。");
+                        throw new ZeusException($"{path}.options.localPort 必须介于 0 与 65535 之间，0 表示自动分配。");
                     }
 
                     break;
@@ -159,6 +202,8 @@ public static class ZeusConfigurationLoader
                     throw new ZeusException(
                         $"{path}.type「{channel.Type}」不受支持。可选 virtual、serial、tcp、tcp-server、udp、udp-server。");
             }
+
+            _ = ZeusConfigurationText.ParseStartupMode(channel.Startup, $"{path}.startup");
         }
 
         var deviceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -184,10 +229,11 @@ public static class ZeusConfigurationLoader
             }
 
             var type = ZeusConfigurationText.Normalize(device.Type);
-            var binder = ZeusJsonBinders.FindDevice(type);
+            var binder = registry?.FindDevice(type) ?? ZeusJsonBinders.FindDevice(type);
             if (binder is null)
             {
-                var known = string.Join("、", ZeusJsonBinders.All.SelectMany(item => item.DeviceTypes).Distinct());
+                var knownBinders = registry?.All ?? ZeusJsonBinders.All;
+                var known = string.Join("、", knownBinders.SelectMany(item => item.DeviceTypes).Distinct());
                 var hint = ZeusJsonBinders.MissingDevicePackageMessage(type);
                 throw new ZeusException(
                     $"{path}.type「{device.Type}」没有对应的 JSON 绑定。{hint}（当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}）。");
@@ -197,21 +243,23 @@ public static class ZeusConfigurationLoader
         }
     }
 
-    private static void ValidateVirtual(ChannelConfiguration channel, string path)
+    private static void ValidateVirtual(ChannelConfiguration channel, string path, IZeusJsonBinderRegistry? registry)
     {
-        if (string.IsNullOrWhiteSpace(channel.Responder))
+        var responderValue = ZeusConfigurationOptions.GetString(channel.Options, "responder", path: path);
+        if (string.IsNullOrWhiteSpace(responderValue))
         {
             return;
         }
 
-        var responder = ZeusConfigurationText.Normalize(channel.Responder);
-        var binder = ZeusJsonBinders.FindResponder(responder);
+        var responder = ZeusConfigurationText.Normalize(responderValue);
+        var binder = registry?.FindResponder(responder) ?? ZeusJsonBinders.FindResponder(responder);
         if (binder is null)
         {
-            var known = string.Join("、", ZeusJsonBinders.All.SelectMany(item => item.ResponderTypes).Distinct());
+            var knownBinders = registry?.All ?? ZeusJsonBinders.All;
+            var known = string.Join("、", knownBinders.SelectMany(item => item.ResponderTypes).Distinct());
             var hint = ZeusJsonBinders.MissingResponderPackageMessage(responder);
             throw new ZeusException(
-                $"{path}.responder「{channel.Responder}」没有对应的 JSON 绑定。{hint}，或省略 responder 以回显写入。当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}。");
+                $"{path}.options.responder「{responderValue}」没有对应的 JSON 绑定。{hint}，或省略 responder 以回显写入。当前已加载：{(string.IsNullOrEmpty(known) ? "无" : known)}。");
         }
 
         binder.ValidateResponder(channel, path);
@@ -219,28 +267,31 @@ public static class ZeusConfigurationLoader
 
     private static void ValidateNetworkChannel(ChannelConfiguration channel, string path, string type)
     {
-        if (string.IsNullOrWhiteSpace(channel.Host))
+        if (string.IsNullOrWhiteSpace(ZeusConfigurationOptions.GetString(channel.Options, "host", path: path)))
         {
-            throw new ZeusException($"{path} 类型为 {type} 时必须提供 host。");
+            throw new ZeusException($"{path} 类型为 {type} 时必须提供 options.host。");
         }
 
-        if (channel.Port is <= 0 or > 65535)
+        var port = ZeusConfigurationOptions.GetInt32(channel.Options, "port", 502, path);
+        if (port is <= 0 or > 65535)
         {
-            throw new ZeusException($"{path}.port 必须介于 1 与 65535 之间。");
+            throw new ZeusException($"{path}.options.port 必须介于 1 与 65535 之间。");
         }
     }
 
     private static void ValidateServerChannel(ChannelConfiguration channel, string path, string type)
     {
-        if (!string.IsNullOrWhiteSpace(channel.LocalAddress)
-            && !IPAddress.TryParse(channel.LocalAddress.Trim(), out _))
+        var localAddress = ZeusConfigurationOptions.GetString(channel.Options, "localAddress", path: path);
+        if (!string.IsNullOrWhiteSpace(localAddress)
+            && !IPAddress.TryParse(localAddress.Trim(), out _))
         {
-            throw new ZeusException($"{path}.localAddress 必须是有效 IP 地址，例如 0.0.0.0 或 127.0.0.1。");
+            throw new ZeusException($"{path}.options.localAddress 必须是有效 IP 地址，例如 0.0.0.0 或 127.0.0.1。");
         }
 
-        if (channel.LocalPort is < 0 or > 65535)
+        var localPort = ZeusConfigurationOptions.GetInt32(channel.Options, "localPort", 0, path);
+        if (localPort is < 0 or > 65535)
         {
-            throw new ZeusException($"{path}.localPort 必须介于 0 与 65535 之间，0 表示自动分配。{type} 只认 localPort，不能把 port 当作监听端口。");
+            throw new ZeusException($"{path}.options.localPort 必须介于 0 与 65535 之间，0 表示自动分配。{type} 只认 localPort，不能把 port 当作监听端口。");
         }
     }
 }

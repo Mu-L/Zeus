@@ -91,13 +91,14 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
         => WriteBitsAsync(FinsMemoryAreaCode.CioBit, address, bitOffset, values, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var group in GroupConsecutive(_specs))
         {
             try
             {
-                await PublishGroupAsync(table, group, cancellationToken).ConfigureAwait(false);
+                await ReadGroupAsync(results, group, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -108,10 +109,12 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
                 LogAcquisitionFailed(ex, group[0].Name);
                 foreach (var spec in group)
                 {
-                    table.PublishError(Name + "." + spec.Name, ex.Message);
+                    results.Add(PointReadResult.Failure(Name + "." + spec.Name, ex.Message));
                 }
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -159,7 +162,7 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
     /// <inheritdoc />
     public ValueTask DisposeAsync() => _client.DisposeAsync();
 
-    private async Task PublishGroupAsync(IPointTableWriter table, IReadOnlyList<FinsPointSpec> group, CancellationToken cancellationToken)
+    private async Task ReadGroupAsync(List<PointReadResult> results, IReadOnlyList<FinsPointSpec> group, CancellationToken cancellationToken)
     {
         var first = group[0];
         if (first.IsBit)
@@ -168,7 +171,7 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
             var bits = await ReadBitsAsync(first.Area, first.Address, first.BitOffset, count, cancellationToken).ConfigureAwait(false);
             foreach (var spec in group)
             {
-                table.Publish(Name + "." + spec.Name, bits[spec.Address - first.Address]);
+                results.Add(PointReadResult.Success(Name + "." + spec.Name, bits[spec.Address - first.Address]));
             }
 
             return;
@@ -179,9 +182,9 @@ public sealed class FinsDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
         foreach (var spec in group)
         {
             var offset = spec.Address - first.Address;
-            table.Publish(
+            results.Add(PointReadResult.Success(
                 Name + "." + spec.Name,
-                FinsCodec.DecodeValue(spec.DataType, words.Skip(offset).Take(spec.WordCount).ToArray(), spec.Scale, _client.Options.WordOrder));
+                FinsCodec.DecodeValue(spec.DataType, words.Skip(offset).Take(spec.WordCount).ToArray(), spec.Scale, _client.Options.WordOrder)));
         }
     }
 

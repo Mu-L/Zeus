@@ -22,6 +22,17 @@
     <!-- 宿主与配置监视需要内部日志作用域；测试访问内部通道订阅快照。 -->
     <InternalsVisibleTo Include="Zeus.Hosting" />
     <InternalsVisibleTo Include="Zeus.Configuration" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Dlt645" />
+    <InternalsVisibleTo Include="Zeus.Protocols.EtherNetIp" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Fins" />
+    <InternalsVisibleTo Include="Zeus.Protocols.HostLink" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Iec104" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Mc" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Mewtocol" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Modbus" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Mqtt" />
+    <InternalsVisibleTo Include="Zeus.Protocols.S7" />
+    <InternalsVisibleTo Include="Zeus.Protocols.Snmp" />
     <InternalsVisibleTo Include="Zeus.Tests" />
   </ItemGroup>
 

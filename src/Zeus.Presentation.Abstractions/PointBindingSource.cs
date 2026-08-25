@@ -12,6 +12,7 @@ public sealed class PointBindingSource : INotifyPropertyChanged, IDisposable
     private readonly string _pointName;
     private readonly IUiDispatcher _dispatcher;
     private readonly Func<object?, string> _formatter;
+    private readonly IDisposable _subscription;
     private PointSnapshot? _snapshot;
     private string _text = string.Empty;
     private bool _disposed;
@@ -39,7 +40,7 @@ public sealed class PointBindingSource : INotifyPropertyChanged, IDisposable
             ApplySnapshot(snapshot, raiseChanged: false);
         }
 
-        _table.Changed += OnChanged;
+        _subscription = _table.Subscribe(_pointName, OnChanged);
     }
 
     /// <inheritdoc />
@@ -104,16 +105,11 @@ public sealed class PointBindingSource : INotifyPropertyChanged, IDisposable
         }
 
         _disposed = true;
-        _table.Changed -= OnChanged;
+        _subscription.Dispose();
     }
 
     private void OnChanged(object? sender, PointChangedEventArgs e)
     {
-        if (!PointUiFormatting.Matches(e.Current.Definition, _pointName))
-        {
-            return;
-        }
-
         Dispatch(() => ApplySnapshot(e.Current, raiseChanged: true));
     }
 
@@ -130,8 +126,7 @@ public sealed class PointBindingSource : INotifyPropertyChanged, IDisposable
 
     private bool TryFindSnapshot(out PointSnapshot? snapshot)
     {
-        snapshot = _table.All.FirstOrDefault(item => PointUiFormatting.Matches(item.Definition, _pointName));
-        return snapshot is not null;
+        return _table.TryGet(_pointName, out snapshot);
     }
 
     private void ApplySnapshot(PointSnapshot snapshot, bool raiseChanged)

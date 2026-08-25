@@ -83,7 +83,7 @@ public sealed class EtherNetIpTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "enip-link", "type": "virtual", "responder": "ethernet-ip" }
+                { "name": "enip-link", "type": "virtual", "options": { "responder": "ethernet-ip" } }
               ],
               "devices": [
                 {
@@ -91,8 +91,8 @@ public sealed class EtherNetIpTests
                   "channel": "enip-link",
                   "type": "ethernet-ip",
                   "points": [
-                    { "name": "temperature", "tag": "Temperature", "dataType": "int", "scale": 0.1, "writable": true },
-                    { "name": "running", "tag": "Running", "dataType": "bool", "writable": true }
+                    { "name": "temperature", "options": { "tag": "Temperature", "dataType": "int", "scale": 0.1, "writable": true } },
+                    { "name": "running", "options": { "tag": "Running", "dataType": "bool", "writable": true } }
                   ]
                 }
               ]

@@ -58,15 +58,16 @@ public sealed class EtherNetIpDevice : DeviceBase, IAcquisitionSource, IPointWri
         => _client.WriteTagAsync(tagName, dataType, value, scale, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var spec in _specs)
         {
             var qualified = Name + "." + spec.Name;
             try
             {
                 var value = await ReadTagAsync(spec.TagName, spec.DataType, scale: spec.Scale, cancellationToken: cancellationToken).ConfigureAwait(false);
-                table.Publish(qualified, value);
+                results.Add(PointReadResult.Success(qualified, value));
             }
             catch (OperationCanceledException)
             {
@@ -75,9 +76,11 @@ public sealed class EtherNetIpDevice : DeviceBase, IAcquisitionSource, IPointWri
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(qualified, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

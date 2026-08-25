@@ -64,7 +64,7 @@ public sealed class SnmpTests
             {
               "acquisition": { "intervalMilliseconds": 50, "pollImmediately": true },
               "channels": [
-                { "name": "snmp-link", "type": "virtual", "responder": "snmp" }
+                { "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }
               ],
               "devices": [
                 {
@@ -72,7 +72,7 @@ public sealed class SnmpTests
                   "channel": "snmp-link",
                   "type": "snmp",
                   "points": [
-                    { "name": "sysName", "oid": "1.3.6.1.2.1.1.5.0", "dataType": "text", "writable": true }
+                    { "name": "sysName", "options": { "oid": "1.3.6.1.2.1.1.5.0", "dataType": "text", "writable": true } }
                   ]
                 }
               ]
@@ -94,12 +94,12 @@ public sealed class SnmpTests
     {
         const string json = """
             {
-              "channels": [{ "name": "snmp-link", "type": "virtual", "responder": "snmp" }],
+              "channels": [{ "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }],
               "devices": [{
                 "name": "agent",
                 "channel": "snmp-link",
                 "type": "snmp",
-                "points": [{ "name": "bad", "oid": "1", "dataType": "integer" }]
+                "points": [{ "name": "bad", "options": { "oid": "1", "dataType": "integer" } }]
               }]
             }
             """;

@@ -39,15 +39,16 @@ public sealed class SnmpDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
         => _client.SetAsync(oid, value, cancellationToken);
 
     /// <inheritdoc />
-    public async Task PollAsync(IPointTableWriter table, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PointReadResult>> ReadAsync(CancellationToken cancellationToken = default)
     {
+        var results = new List<PointReadResult>(_specs.Count);
         foreach (var spec in _specs)
         {
             var qualified = Name + "." + spec.Name;
             try
             {
                 var value = await _client.GetAsync(spec.Oid, cancellationToken).ConfigureAwait(false);
-                table.Publish(qualified, SnmpCodec.ToEngineeringValue(SnmpCodec.Coerce(value, spec.DataType), spec.Scale));
+                results.Add(PointReadResult.Success(qualified, SnmpCodec.ToEngineeringValue(SnmpCodec.Coerce(value, spec.DataType), spec.Scale)));
             }
             catch (OperationCanceledException)
             {
@@ -56,9 +57,11 @@ public sealed class SnmpDevice : DeviceBase, IAcquisitionSource, IPointWriter, I
             catch (Exception ex)
             {
                 LogAcquisitionFailed(ex, spec.Name);
-                table.PublishError(qualified, ex.Message);
+                results.Add(PointReadResult.Failure(qualified, ex.Message));
             }
         }
+
+        return results;
     }
 
     /// <inheritdoc />

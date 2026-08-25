@@ -12,6 +12,9 @@ public interface IChannel : IAsyncDisposable
     /// <summary>当前生命周期状态。</summary>
     ChannelState State { get; }
 
+    /// <summary>宿主启动时本通道打开失败的处理策略。</summary>
+    ChannelStartupMode StartupMode { get; set; }
+
     /// <summary>状态发生变化时触发，包括打开成功、主动关闭与故障。</summary>
     event EventHandler<ChannelStateChangedEventArgs>? StateChanged;
 

@@ -6,16 +6,16 @@ public sealed class SnmpClient : IAsyncDisposable
     private readonly IChannel _channel;
     private readonly SnmpOptions _options;
     private readonly TimeSpan _timeout;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly object _bufferLock = new();
-    private readonly List<byte> _buffer = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly ChannelTransactionCoordinator _gate;
+    private readonly ProtocolResponseBuffer _receive;
     private int _requestId;
 
     /// <summary>创建 SNMP v2c 客户端。</summary>
     public SnmpClient(IChannel channel, SnmpOptions? options = null, TimeSpan? timeout = null)
     {
         _channel = channel ?? throw new ArgumentNullException(nameof(channel));
+        _gate = ChannelTransactionCoordinator.For(_channel);
+        _receive = new ProtocolResponseBuffer(_channel);
         _options = CopyOptions(options ?? new SnmpOptions());
         ValidateOptions(_options);
         _timeout = timeout ?? TimeSpan.FromSeconds(1);
@@ -75,7 +75,6 @@ public sealed class SnmpClient : IAsyncDisposable
     {
         _channel.DataReceived -= OnDataReceived;
         _channel.StateChanged -= OnStateChanged;
-        _gate.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -89,9 +88,9 @@ public sealed class SnmpClient : IAsyncDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            lock (_bufferLock)
+            lock (_receive.SyncRoot)
             {
-                _buffer.Clear();
+                _receive.Bytes.Clear();
             }
 
             var requestId = NextRequestId();
@@ -132,12 +131,13 @@ public sealed class SnmpClient : IAsyncDisposable
         while (true)
         {
             timeoutCts.Token.ThrowIfCancellationRequested();
-            lock (_bufferLock)
+            Task dataPulse;
+            lock (_receive.SyncRoot)
             {
-                if (_buffer.Count > 0)
+                if (_receive.Bytes.Count > 0)
                 {
-                    var packet = _buffer.ToArray();
-                    _buffer.Clear();
+                    var packet = _receive.Bytes.ToArray();
+                    _receive.Bytes.Clear();
                     var response = SnmpCodec.DecodeMessage(packet);
                     if (response.PduType != SnmpCodec.GetResponse)
                     {
@@ -152,12 +152,12 @@ public sealed class SnmpClient : IAsyncDisposable
                     return response;
                 }
 
-                _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                dataPulse = _receive.WaitForDataLocked();
             }
 
             try
             {
-                await _dataPulse.Task.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await dataPulse.WaitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -179,35 +179,16 @@ public sealed class SnmpClient : IAsyncDisposable
     }
 
     private void OnDataReceived(object? sender, ChannelDataReceivedEventArgs e)
-    {
-        lock (_bufferLock)
-        {
-            if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, ProtocolReceiveBuffer.DefaultMaxBytes))
-            {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, ProtocolReceiveBuffer.DefaultMaxBytes));
-                _dataPulse = null;
-                return;
-            }
-
-            _dataPulse?.TrySetResult(true);
-            _dataPulse = null;
-        }
-    }
+        => _receive.Append(e.Data);
 
     private void OnStateChanged(object? sender, ChannelStateChangedEventArgs e)
     {
         if (e.Current is ChannelState.Faulted or ChannelState.Closed)
         {
-            lock (_bufferLock)
-            {
-                _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException(
-                    $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 SNMP 请求已取消。"));
-                _dataPulse = null;
-            }
+            _receive.CancelPending(new ZeusProtocolException(
+                $"通道 {_channel.Name} 已变为 {e.Current}，未完成的 SNMP 请求已取消。"));
         }
     }
-
     private static SnmpOptions CopyOptions(SnmpOptions source)
         => new()
         {
