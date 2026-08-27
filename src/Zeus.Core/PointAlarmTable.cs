@@ -88,7 +88,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         if (!ReferenceEquals(previous, current))
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+            RaiseChanged(previous, current);
         }
 
         return current;
@@ -118,7 +118,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         if (!ReferenceEquals(previous, current))
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+            RaiseChanged(previous, current);
         }
 
         return current;
@@ -142,7 +142,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         foreach (var change in changes)
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(change.Previous, change.Current));
+            RaiseChanged(change.Previous, change.Current);
         }
 
         return changes.Select(item => item.Current).ToArray();
@@ -169,7 +169,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             _activeByPoint[previous.QualifiedName] = current;
         }
 
-        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        RaiseChanged(previous, current);
         return current;
     }
 
@@ -200,7 +200,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             ScheduleShelveTimerLocked();
         }
 
-        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        RaiseChanged(previous, current);
         return current;
     }
 
@@ -231,7 +231,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             ScheduleShelveTimerLocked();
         }
 
-        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        RaiseChanged(previous, current);
         return current;
     }
 
@@ -265,7 +265,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         if (previous is not null && current is not null)
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+            RaiseChanged(previous, current);
         }
     }
 
@@ -302,7 +302,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
 
         if (previous is not null && current is not null)
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+            RaiseChanged(previous, current);
             return;
         }
 
@@ -462,7 +462,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             || previous.Assignee != current.Assignee
             || !Equals(previous.Value, current.Value)))
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+            RaiseChanged(previous, current);
         }
     }
 
@@ -482,7 +482,7 @@ public sealed class PointAlarmTable : IPointAlarmTable
             ScheduleShelveTimerLocked();
         }
 
-        Changed?.Invoke(this, new PointAlarmChangedEventArgs(previous, current));
+        RaiseChanged(previous, current);
     }
 
     private PointAlarmRecord AcknowledgeLocked(PointAlarmRecord existing, string? acknowledgedBy)
@@ -617,7 +617,29 @@ public sealed class PointAlarmTable : IPointAlarmTable
     {
         foreach (var change in changes)
         {
-            Changed?.Invoke(this, new PointAlarmChangedEventArgs(change.Previous, change.Current));
+            RaiseChanged(change.Previous, change.Current);
+        }
+    }
+
+    private void RaiseChanged(PointAlarmRecord? previous, PointAlarmRecord current)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        var args = new PointAlarmChangedEventArgs(previous, current);
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<PointAlarmChangedEventArgs>)callback)(this, args);
+            }
+            catch
+            {
+                // 报警观察者失败不能阻止报警队列和其他绑定源继续更新。
+            }
         }
     }
 

@@ -350,7 +350,7 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             _batch.Clear();
         }
 
-        BatchChanged?.Invoke(this, new PointBatchChangedEventArgs(changes));
+        InvokeEventHandlers(BatchChanged, new PointBatchChangedEventArgs(changes), nameof(BatchChanged));
     }
 
     /// <inheritdoc />
@@ -630,21 +630,61 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             }
         }
 
-        Changed?.Invoke(this, args);
+        InvokeEventHandlers(Changed, args, nameof(Changed));
         foreach (var handler in targeted)
         {
-            handler(this, args);
+            InvokeEventHandler(handler, args, nameof(Subscribe));
         }
 
         if (emitImmediateBatch)
         {
-            BatchChanged?.Invoke(this, new PointBatchChangedEventArgs([args]));
+            InvokeEventHandlers(BatchChanged, new PointBatchChangedEventArgs([args]), nameof(BatchChanged));
         }
     }
 
     private void RaiseStructureChanged()
     {
-        BatchChanged?.Invoke(this, new PointBatchChangedEventArgs([]));
+        InvokeEventHandlers(BatchChanged, new PointBatchChangedEventArgs([]), nameof(BatchChanged));
+    }
+
+    private void InvokeEventHandlers<TEventArgs>(
+        EventHandler<TEventArgs>? handlers,
+        TEventArgs args,
+        string eventName)
+        where TEventArgs : EventArgs
+    {
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            InvokeEventHandler((EventHandler<TEventArgs>)callback, args, eventName);
+        }
+    }
+
+    private void InvokeEventHandler<TEventArgs>(
+        EventHandler<TEventArgs> handler,
+        TEventArgs args,
+        string eventName)
+        where TEventArgs : EventArgs
+    {
+        try
+        {
+            handler(this, args);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                _logger.LogWarning(ex, "点表 {Event} 事件处理器抛出异常，已忽略。", eventName);
+            }
+            catch
+            {
+                // 事件隔离路径不能再被日志提供程序异常打断。
+            }
+        }
     }
 
     private static bool MatchesSubscription(string pattern, PointSnapshot snapshot)

@@ -292,7 +292,7 @@ public abstract class ChannelBase : IChannel
 
         var copy = data.ToArray();
         PublishPacketTrace(ChannelTraceDirection.Received, copy);
-        DataReceived?.Invoke(this, new ChannelDataReceivedEventArgs(copy, remoteEndPoint));
+        InvokeEventHandlers(DataReceived, new ChannelDataReceivedEventArgs(copy, remoteEndPoint), nameof(DataReceived));
     }
 
     /// <summary>
@@ -341,7 +341,7 @@ public abstract class ChannelBase : IChannel
         }
 
         var copy = data.ToArray();
-        PacketTraced?.Invoke(this, new ChannelTraceEventArgs(direction, copy, DateTimeOffset.UtcNow));
+        InvokeEventHandlers(PacketTraced, new ChannelTraceEventArgs(direction, copy, DateTimeOffset.UtcNow), nameof(PacketTraced));
     }
 
     /// <summary>
@@ -358,7 +358,44 @@ public abstract class ChannelBase : IChannel
         }
 
         Volatile.Write(ref _state, (int)next);
-        StateChanged?.Invoke(this, new ChannelStateChangedEventArgs(previous, next, error));
+        InvokeEventHandlers(StateChanged, new ChannelStateChangedEventArgs(previous, next, error), nameof(StateChanged));
+    }
+
+    private void InvokeEventHandlers<TEventArgs>(
+        EventHandler<TEventArgs>? handlers,
+        TEventArgs args,
+        string eventName)
+        where TEventArgs : EventArgs
+    {
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<TEventArgs>)callback)(this, args);
+            }
+            catch (Exception ex)
+            {
+                LogEventHandlerException(eventName, ex);
+            }
+        }
+    }
+
+    private void LogEventHandlerException(string eventName, Exception ex)
+    {
+        try
+        {
+            using var scope = BeginChannelScope();
+            _logger.LogWarning(ex, "通道 {Channel} 的 {Event} 事件处理器抛出异常，已忽略。", Name, eventName);
+        }
+        catch
+        {
+            // 事件隔离路径不能再被日志提供程序异常打断。
+        }
     }
 
     /// <summary>

@@ -66,6 +66,35 @@ public sealed class HostAndChannelTests
     }
 
     /// <summary>
+    /// 业务事件处理器抛异常不能污染通道生命周期；其他订阅者仍应收到同一事件。
+    /// </summary>
+    [Fact]
+    public async Task ChannelEventHandlerException_DoesNotFaultChannelOrSkipOtherSubscribers()
+    {
+        var channel = new VirtualChannel("loop");
+        var stateNotifications = 0;
+        var traceNotifications = 0;
+        var received = false;
+
+        channel.StateChanged += (_, _) => throw new InvalidOperationException("state handler failed");
+        channel.StateChanged += (_, _) => stateNotifications++;
+        channel.PacketTraced += (_, _) => throw new InvalidOperationException("trace handler failed");
+        channel.PacketTraced += (_, _) => traceNotifications++;
+        channel.DataReceived += (_, _) => throw new InvalidOperationException("data handler failed");
+        channel.DataReceived += (_, e) => received = e.Data.Length == 1 && e.Data.Span[0] == 0x01;
+
+        await channel.OpenAsync();
+        await channel.WriteAsync(new byte[] { 0x01 });
+
+        Assert.Equal(ChannelState.Open, channel.State);
+        Assert.Equal(2, stateNotifications);
+        Assert.Equal(2, traceNotifications);
+        Assert.True(received);
+
+        await channel.DisposeAsync();
+    }
+
+    /// <summary>
     /// 滚动记录器只保留最近 N 条报文，并保持从旧到新的顺序。
     /// </summary>
     [Fact]
@@ -174,6 +203,51 @@ public sealed class HostAndChannelTests
     }
 
     /// <summary>
+    /// 通道目录观察者抛异常不能阻止其他观察者看到同一次变更。
+    /// </summary>
+    [Fact]
+    public void ChannelRegistryChangedHandlerException_DoesNotSkipOtherSubscribers()
+    {
+        var registry = new ChannelRegistry();
+        var seen = 0;
+        registry.Changed += (_, _) => throw new InvalidOperationException("observer failed");
+        registry.Changed += (_, e) =>
+        {
+            seen++;
+            Assert.Equal(ChannelRegistryChange.Added, e.Change);
+            Assert.Equal("bus", e.Channel.Name);
+        };
+
+        registry.Add(new VirtualChannel("bus"));
+
+        Assert.Equal(1, seen);
+    }
+
+    /// <summary>
+    /// 设备目录观察者抛异常不能阻止点表等其他观察者继续同步拓扑。
+    /// </summary>
+    [Fact]
+    public void DeviceRegistryChangedHandlerException_DoesNotSkipOtherSubscribers()
+    {
+        var channels = new ChannelRegistry();
+        var channel = new VirtualChannel("bus");
+        channels.Add(channel);
+        var registry = new DeviceRegistry();
+        var seen = 0;
+        registry.Changed += (_, _) => throw new InvalidOperationException("observer failed");
+        registry.Changed += (_, e) =>
+        {
+            seen++;
+            Assert.Equal(DeviceRegistryChange.Added, e.Change);
+            Assert.Equal("oven", e.Device.Name);
+        };
+
+        registry.Add(new TestDevice("oven", channel));
+
+        Assert.Equal(1, seen);
+    }
+
+    /// <summary>
     /// 未启动时写入必须失败，并提示先调用 StartAsync。
     /// </summary>
     [Fact]
@@ -241,5 +315,12 @@ public sealed class HostAndChannelTests
             EventIds.Add(eventId);
             Messages.Add(formatter(state, exception));
         }
+    }
+
+    private sealed class TestDevice(string name, IChannel channel) : IDevice
+    {
+        public string Name { get; } = name;
+
+        public IChannel Channel { get; } = channel;
     }
 }

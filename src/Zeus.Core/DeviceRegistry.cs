@@ -38,7 +38,7 @@ public sealed class DeviceRegistry : IDeviceRegistry
             _ordered.Add(device);
         }
 
-        Changed?.Invoke(this, new DeviceRegistryChangedEventArgs(DeviceRegistryChange.Added, device));
+        RaiseChanged(new DeviceRegistryChangedEventArgs(DeviceRegistryChange.Added, device));
     }
 
     /// <inheritdoc />
@@ -102,7 +102,7 @@ public sealed class DeviceRegistry : IDeviceRegistry
             _ordered.Remove(device);
         }
 
-        Changed?.Invoke(this, new DeviceRegistryChangedEventArgs(DeviceRegistryChange.Removed, device));
+        RaiseChanged(new DeviceRegistryChangedEventArgs(DeviceRegistryChange.Removed, device));
 
         if (device is IAsyncDisposable asyncDisposable)
         {
@@ -111,6 +111,27 @@ public sealed class DeviceRegistry : IDeviceRegistry
         else if (device is IDisposable disposable)
         {
             disposable.Dispose();
+        }
+    }
+
+    private void RaiseChanged(DeviceRegistryChangedEventArgs args)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<DeviceRegistryChangedEventArgs>)callback)(this, args);
+            }
+            catch
+            {
+                // 目录观察者不能阻止其他观察者看到同一次拓扑变化。
+            }
         }
     }
 }

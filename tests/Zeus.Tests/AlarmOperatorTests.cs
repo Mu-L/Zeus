@@ -29,6 +29,28 @@ public sealed class AlarmOperatorTests
     }
 
     /// <summary>
+    /// 报警观察者抛异常不能阻止其他绑定源收到同一次报警变化。
+    /// </summary>
+    [Fact]
+    public void AlarmTableChangedHandlerException_DoesNotSkipOtherSubscribers()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        var seen = 0;
+        alarms.Changed += (_, _) => throw new InvalidOperationException("observer failed");
+        alarms.Changed += (_, e) =>
+        {
+            seen++;
+            Assert.Equal("oven.pv", e.Current.QualifiedName);
+        };
+
+        table.Publish("oven.pv", 20d);
+
+        Assert.Equal(1, seen);
+    }
+
+    /// <summary>
     /// 指派会改责任人，不改变确认状态。
     /// </summary>
     [Fact]

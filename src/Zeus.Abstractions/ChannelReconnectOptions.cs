@@ -47,6 +47,22 @@ public sealed class ChannelReconnectOptions
     public void PublishState(ReconnectStateChangedEventArgs args)
     {
         ArgumentNullException.ThrowIfNull(args);
-        StateChanged?.Invoke(this, args);
+        var handlers = StateChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<ReconnectStateChangedEventArgs>)callback)(this, args);
+            }
+            catch
+            {
+                // 重连状态观察者只是诊断钩子，单个回调失败不能阻止恢复流程。
+            }
+        }
     }
 }

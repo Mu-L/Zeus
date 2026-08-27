@@ -249,6 +249,50 @@ public sealed class LifecycleTests
     }
 
     /// <summary>
+    /// 重连状态观察者只是诊断钩子，单个回调抛异常不能阻止自动重连任务启动。
+    /// </summary>
+    [Fact]
+    public async Task ReconnectStateChangedException_DoesNotStopReconnectOrSkipOtherSubscribers()
+    {
+        var channel = new RecoverableChannel("bus");
+        var succeeded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var scheduled = 0;
+
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddReconnect(options =>
+            {
+                options.Enabled = true;
+                options.InitialDelay = TimeSpan.FromMilliseconds(30);
+                options.MaxDelay = TimeSpan.FromMilliseconds(30);
+                options.StateChanged += (_, _) => throw new InvalidOperationException("observer failed");
+                options.StateChanged += (_, e) =>
+                {
+                    if (e.State == ReconnectState.Scheduled)
+                    {
+                        scheduled++;
+                    }
+
+                    if (e.State == ReconnectState.Succeeded)
+                    {
+                        succeeded.TrySetResult();
+                    }
+                };
+            });
+            builder.Register((_, channels, _) => channels.Add(channel));
+        });
+
+        await host.StartAsync();
+        channel.FailNextWrite = true;
+        await Assert.ThrowsAsync<ZeusChannelException>(() => channel.WriteAsync(new byte[] { 0x01 }));
+
+        await succeeded.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Equal(ChannelState.Open, channel.State);
+        Assert.True(scheduled > 0);
+    }
+
+    /// <summary>
     /// 重连状态回调可能由用户代码再进入宿主，不能在服务内部锁里发布导致运行期注册被阻塞。
     /// </summary>
     [Fact]

@@ -107,6 +107,37 @@ public sealed class PointTableContractTests
     }
 
     /// <summary>
+    /// 点表事件处理器抛异常不能污染采集发布；其他订阅者仍应收到同一变化。
+    /// </summary>
+    [Fact]
+    public void PointTableEventHandlerException_DoesNotBreakPublicationOrSkipOtherSubscribers()
+    {
+        var table = new PointTable();
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
+        var changed = 0;
+        var subscribed = 0;
+        var batches = 0;
+
+        table.Changed += (_, _) => throw new InvalidOperationException("changed handler failed");
+        table.Changed += (_, _) => changed++;
+        table.BatchChanged += (_, _) => throw new InvalidOperationException("batch handler failed");
+        table.BatchChanged += (_, e) =>
+        {
+            batches++;
+            Assert.Single(e.Changes);
+        };
+        using var subscription = table.Subscribe("pv", (_, _) => throw new InvalidOperationException("subscription failed"));
+        using var subscription2 = table.Subscribe("pv", (_, _) => subscribed++);
+
+        table.Publish("oven.pv", (ushort)12);
+
+        Assert.Equal(1, changed);
+        Assert.Equal(1, subscribed);
+        Assert.Equal(1, batches);
+        Assert.Equal((ushort)12, table.Get<ushort>("pv"));
+    }
+
+    /// <summary>
     /// 点表应保留采集结果的质量、源时间戳，并在失败时保留旧值但标记 Bad。
     /// </summary>
     [Fact]

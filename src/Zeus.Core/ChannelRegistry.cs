@@ -39,7 +39,7 @@ public sealed class ChannelRegistry : IChannelRegistry
             _ordered.Add(channel);
         }
 
-        Changed?.Invoke(this, new ChannelRegistryChangedEventArgs(ChannelRegistryChange.Added, channel));
+        RaiseChanged(new ChannelRegistryChangedEventArgs(ChannelRegistryChange.Added, channel));
     }
 
     /// <inheritdoc />
@@ -90,7 +90,7 @@ public sealed class ChannelRegistry : IChannelRegistry
             _ordered.Remove(channel);
         }
 
-        Changed?.Invoke(this, new ChannelRegistryChangedEventArgs(ChannelRegistryChange.Removed, channel));
+        RaiseChanged(new ChannelRegistryChangedEventArgs(ChannelRegistryChange.Removed, channel));
 
         try
         {
@@ -99,6 +99,27 @@ public sealed class ChannelRegistry : IChannelRegistry
         finally
         {
             await channel.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void RaiseChanged(ChannelRegistryChangedEventArgs args)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var callback in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<ChannelRegistryChangedEventArgs>)callback)(this, args);
+            }
+            catch
+            {
+                // 目录观察者不能阻止其他观察者看到同一次拓扑变化。
+            }
         }
     }
 }

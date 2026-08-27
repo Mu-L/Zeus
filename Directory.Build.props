@@ -19,7 +19,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>zeus;host;modbus;mitsubishi;mc;siemens;s7;omron;fins;host-link;panasonic;mewtocol;ethernet-ip;cip;allen-bradley;dlt645;iec104;iec-60870-5-104;mqtt;mqtt311;snmp;snmpv2c;opcua;opc-ua;message-queue;electric-meter;serial;tcp;udp;winforms;wpf;industrial;scada</PackageTags>
-    <PackageReleaseNotes>0.20.1：修复取消与协议超时区分、运行期拓扑回滚、报警搁置/解除抑制、点表时间戳刷新、重连回调与 TCP 服务端广播取消语义。</PackageReleaseNotes>
+    <PackageReleaseNotes>0.20.1：修复取消与协议超时区分、运行期拓扑回滚、报警搁置/解除抑制、点表时间戳刷新、通道/点表/报警/注册表/重连事件隔离与 TCP 服务端广播取消语义。</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/Mokode-dev/Zeus</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Mokode-dev/Zeus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
