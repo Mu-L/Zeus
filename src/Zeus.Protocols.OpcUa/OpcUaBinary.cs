@@ -357,30 +357,30 @@ internal static class OpcUaBinary
             case 0x00:
                 return OpcUaNodeId.Numeric(reader.ReadByte());
             case 0x01:
-            {
-                var namespaceIndex = reader.ReadByte();
-                return OpcUaNodeId.Numeric(ReadUInt16(ref reader), namespaceIndex);
-            }
+                {
+                    var namespaceIndex = reader.ReadByte();
+                    return OpcUaNodeId.Numeric(ReadUInt16(ref reader), namespaceIndex);
+                }
             case 0x02:
-            {
-                var namespaceIndex = ReadUInt16(ref reader);
-                return OpcUaNodeId.Numeric(ReadUInt32(ref reader), namespaceIndex);
-            }
+                {
+                    var namespaceIndex = ReadUInt16(ref reader);
+                    return OpcUaNodeId.Numeric(ReadUInt32(ref reader), namespaceIndex);
+                }
             case 0x03:
-            {
-                var namespaceIndex = ReadUInt16(ref reader);
-                return OpcUaNodeId.String(ReadString(ref reader) ?? string.Empty, namespaceIndex);
-            }
+                {
+                    var namespaceIndex = ReadUInt16(ref reader);
+                    return OpcUaNodeId.String(ReadString(ref reader) ?? string.Empty, namespaceIndex);
+                }
             case 0x04:
-            {
-                var namespaceIndex = ReadUInt16(ref reader);
-                return new OpcUaNodeId(namespaceIndex, OpcUaNodeIdType.Guid, ReadGuid(ref reader));
-            }
+                {
+                    var namespaceIndex = ReadUInt16(ref reader);
+                    return new OpcUaNodeId(namespaceIndex, OpcUaNodeIdType.Guid, ReadGuid(ref reader));
+                }
             case 0x05:
-            {
-                var namespaceIndex = ReadUInt16(ref reader);
-                return new OpcUaNodeId(namespaceIndex, OpcUaNodeIdType.Opaque, ReadByteString(ref reader) ?? []);
-            }
+                {
+                    var namespaceIndex = ReadUInt16(ref reader);
+                    return new OpcUaNodeId(namespaceIndex, OpcUaNodeIdType.Opaque, ReadByteString(ref reader) ?? []);
+                }
             default:
                 throw new OpcUaException($"不支持的 NodeId 编码 0x{encoding:X2}。");
         }

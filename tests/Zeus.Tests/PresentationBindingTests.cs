@@ -190,6 +190,32 @@ public sealed class PresentationBindingTests
     }
 
     /// <summary>
+    /// 整表绑定源应跟随点表结构变化，而不只跟随采集值变化。
+    /// </summary>
+    [Fact]
+    public void PointTableBindingSource_RefreshesWhenPointsAreRegisteredOrRemoved()
+    {
+        var table = new PointTable();
+        using var source = new PointTableBindingSource(table, ImmediateUiDispatcher.Instance);
+        var notifications = 0;
+        source.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PointTableBindingSource.All))
+            {
+                notifications++;
+            }
+        };
+
+        table.Register(new PointDefinition("temperature", "oven", PointValueKind.Double));
+        Assert.Equal(1, source.Count);
+        Assert.Equal("oven.temperature", source.All[0].QualifiedName);
+
+        table.Unregister("oven.temperature");
+        Assert.Equal(0, source.Count);
+        Assert.Equal(2, notifications);
+    }
+
+    /// <summary>
     /// BindGauge 应把当前值按报警限映射到 0–1。
     /// </summary>
     [Fact]

@@ -59,7 +59,11 @@ public sealed class McClient : IAsyncDisposable
 
             while (true)
             {
-                timeoutCts.Token.ThrowIfCancellationRequested();
+                ProtocolTimeout.ThrowIfCancellationRequested(
+                    timeoutCts.Token,
+                    cancellationToken,
+                    () => new ZeusProtocolException(
+                        $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MC 应答。请检查 PLC IP、端口、帧类型、编码或用 McSlaveResponder 联调。"));
                 Task dataPulse;
                 lock (_receive.SyncRoot)
                 {
@@ -394,7 +398,11 @@ public sealed class McClient : IAsyncDisposable
 
             while (true)
             {
-                timeoutCts.Token.ThrowIfCancellationRequested();
+                ProtocolTimeout.ThrowIfCancellationRequested(
+                    timeoutCts.Token,
+                    cancellationToken,
+                    () => new ZeusProtocolException(
+                        $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MC 应答。请检查 PLC IP、端口、帧类型、编码或用 McSlaveResponder 联调。"));
                 Task dataPulse;
                 lock (_receive.SyncRoot)
                 {

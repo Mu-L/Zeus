@@ -45,6 +45,11 @@ public sealed class TcpClientChannel : ChannelBase
         {
             await client.ConnectAsync(_options.Host, _options.Port, linked.Token).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            client.Dispose();
+            throw;
+        }
         catch (Exception ex)
         {
             client.Dispose();

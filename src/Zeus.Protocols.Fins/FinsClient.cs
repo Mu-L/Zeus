@@ -179,7 +179,11 @@ public sealed class FinsClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 FINS/TCP 节点地址响应。请检查 PLC IP、端口 9600 与 FINS/TCP 设置。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {
@@ -225,7 +229,11 @@ public sealed class FinsClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 FINS 应答。请检查 PLC 节点号、网络号、端口 9600，或用 FinsSlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

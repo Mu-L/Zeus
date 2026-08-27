@@ -130,6 +130,40 @@ public sealed class PointTableContractTests
     }
 
     /// <summary>
+    /// 值未变化时仍应刷新快照时间戳，但不能把心跳轮询放大成逐点变化事件。
+    /// </summary>
+    [Fact]
+    public async Task PointTable_RefreshesTimestampWhenValueUnchangedWithoutChangedEvent()
+    {
+        var table = new PointTable();
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.UInt16));
+        var firstSampledAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        table.Publish(PointReadResult.Success("oven.pv", (ushort)12, firstSampledAt));
+        var first = table.Get("pv");
+        var changes = 0;
+        var batches = 0;
+        table.Changed += (_, _) => changes++;
+        table.BatchChanged += (_, e) =>
+        {
+            batches++;
+            Assert.Empty(e.Changes);
+        };
+
+        await Task.Delay(5);
+        var secondSampledAt = firstSampledAt.AddMilliseconds(100);
+        table.BeginBatch();
+        table.Publish(PointReadResult.Success("oven.pv", (ushort)12, secondSampledAt));
+        table.EndBatch();
+
+        var second = table.Get("pv");
+        Assert.Equal(0, changes);
+        Assert.Equal(1, batches);
+        Assert.Equal(secondSampledAt, second.SourceTimestamp);
+        Assert.True(second.UpdatedAt > first.UpdatedAt);
+        Assert.Equal((ushort)12, second.Value);
+    }
+
+    /// <summary>
     /// TryGetDouble 把原始寄存器和带 scale 的工程值都读成 double。
     /// </summary>
     [Fact]

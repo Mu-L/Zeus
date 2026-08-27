@@ -144,7 +144,11 @@ public sealed class MewtocolClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MEWTOCOL {command} 应答。请检查站号、串口参数、TCP 透传设置，或用 MewtocolSlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

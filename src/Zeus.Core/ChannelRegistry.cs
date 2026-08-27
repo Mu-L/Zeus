@@ -77,6 +77,8 @@ public sealed class ChannelRegistry : IChannelRegistry
     /// <inheritdoc />
     public async Task RemoveAsync(string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!TryGet(name, out var channel) || channel is null)
         {
             throw new ZeusException($"找不到名为 {name} 的通道，无法移除。");

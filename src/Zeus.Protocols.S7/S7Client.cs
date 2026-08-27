@@ -273,7 +273,11 @@ public sealed class S7Client : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 {operation} 应答。请检查 PLC IP、端口 102、rack/slot，或用 S7SlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {
@@ -309,7 +313,11 @@ public sealed class S7Client : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 {operation} 应答。请检查 PLC IP、端口 102、rack/slot，或用 S7SlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

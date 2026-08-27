@@ -424,6 +424,8 @@ public static class ZeusHostBuilderCommunicationExtensions
         where TChannel : IChannel
     {
         ArgumentNullException.ThrowIfNull(host);
+        cancellationToken.ThrowIfCancellationRequested();
+
         channel.StartupMode = startupMode;
         host.Channels.Add(channel);
         if (!host.IsRunning)
@@ -434,6 +436,19 @@ public static class ZeusHostBuilderCommunicationExtensions
         try
         {
             await channel.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await host.Channels.RemoveAsync(channel.Name, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                await channel.DisposeAsync().ConfigureAwait(false);
+            }
+
+            throw;
         }
         catch (Exception)
         {

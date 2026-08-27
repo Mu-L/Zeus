@@ -60,7 +60,11 @@ public sealed class ModbusClient : IAsyncDisposable
 
             while (true)
             {
-                timeoutCts.Token.ThrowIfCancellationRequested();
+                ProtocolTimeout.ThrowIfCancellationRequested(
+                    timeoutCts.Token,
+                    cancellationToken,
+                    () => new ZeusProtocolException(
+                        $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 Modbus 应答。请检查从站地址、波特率，或用 ModbusSlaveResponder 挂到虚拟通道上联调。"));
                 Task dataPulse;
                 lock (_receive.SyncRoot)
                 {

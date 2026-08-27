@@ -59,6 +59,37 @@ public sealed class LifecycleTests
     }
 
     /// <summary>
+    /// 调用方取消打开时，通道不能被误标为 Faulted，否则自动重连会把正常取消当故障处理。
+    /// </summary>
+    [Fact]
+    public async Task Channel_OpenAsyncCancellation_DoesNotFaultChannel()
+    {
+        var channel = new RecoverableChannel("bus") { DelayOpenUntilCancelled = true };
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => channel.OpenAsync(cts.Token));
+
+        Assert.Equal(ChannelState.Created, channel.State);
+        await channel.DisposeAsync();
+    }
+
+    /// <summary>
+    /// 写入取消应按取消传播，不能改写成通道写入失败。
+    /// </summary>
+    [Fact]
+    public async Task Channel_WriteAsyncCancellation_DoesNotFaultChannel()
+    {
+        var channel = new RecoverableChannel("bus");
+        await channel.OpenAsync();
+        channel.CancelNextWrite = true;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => channel.WriteAsync(new byte[] { 0x01 }));
+
+        Assert.Equal(ChannelState.Open, channel.State);
+        await channel.DisposeAsync();
+    }
+
+    /// <summary>
     /// 通道进入 Faulted 后，自动重连应在短延迟内再次打开。
     /// </summary>
     [Fact]
@@ -89,6 +120,27 @@ public sealed class LifecycleTests
 
         Assert.Equal(ChannelState.Open, channel.State);
         await channel.WriteAsync(new byte[] { 0x02 });
+    }
+
+    /// <summary>
+    /// 启动过程中调用方取消应按取消传播，并关闭已经打开的通道。
+    /// </summary>
+    [Fact]
+    public async Task Host_StartAsyncCancellation_RollsBackOpenedChannels()
+    {
+        var slow = new RecoverableChannel("slow") { DelayOpenUntilCancelled = true };
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddVirtualChannel("fast");
+            builder.Register((_, channels, _) => channels.Add(slow));
+        });
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.StartAsync(cts.Token));
+
+        Assert.False(host.IsRunning);
+        Assert.Equal(ChannelState.Closed, host.Channels.Get("fast").State);
+        Assert.Equal(ChannelState.Created, slow.State);
     }
 
     /// <summary>
@@ -197,6 +249,68 @@ public sealed class LifecycleTests
     }
 
     /// <summary>
+    /// 重连状态回调可能由用户代码再进入宿主，不能在服务内部锁里发布导致运行期注册被阻塞。
+    /// </summary>
+    [Fact]
+    public async Task ReconnectStateChanged_CanRegisterChannelDuringCancelledCallback()
+    {
+        var channel = new RecoverableChannel("bus");
+        var scheduled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        IZeusHost? callbackHost = null;
+        Task? registrationTask = null;
+        Exception? callbackException = null;
+        var callbackRegistrationCompleted = false;
+
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddReconnect(options =>
+            {
+                options.Enabled = true;
+                options.InitialDelay = TimeSpan.FromSeconds(30);
+                options.MaxDelay = TimeSpan.FromSeconds(30);
+                options.StateChanged += (_, e) =>
+                {
+                    if (e.State == ReconnectState.Scheduled)
+                    {
+                        scheduled.TrySetResult();
+                        return;
+                    }
+
+                    if (e.State != ReconnectState.Cancelled)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        registrationTask = Task.Run(async () => await callbackHost!.AddVirtualChannelAsync("callback-added"));
+                        callbackRegistrationCompleted = registrationTask.Wait(TimeSpan.FromSeconds(2));
+                    }
+                    catch (Exception ex)
+                    {
+                        callbackException = ex;
+                    }
+                };
+            });
+            builder.Register((_, channels, _) => channels.Add(channel));
+        });
+        callbackHost = host;
+
+        await host.StartAsync();
+        channel.FailNextWrite = true;
+        await Assert.ThrowsAsync<ZeusChannelException>(() => channel.WriteAsync(new byte[] { 0x01 }));
+        await scheduled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        await host.RemoveChannelAsync("bus");
+
+        Assert.Null(callbackException);
+        Assert.True(callbackRegistrationCompleted, "重连状态回调不应持有内部锁阻塞运行期注册通道。");
+        Assert.NotNull(registrationTask);
+        await registrationTask.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.True(host.Channels.TryGet("callback-added", out _));
+    }
+
+    /// <summary>
     /// 关闭自动重连后，故障通道必须保持 Faulted，直到调用方自行 OpenAsync。
     /// </summary>
     [Fact]
@@ -266,6 +380,45 @@ public sealed class LifecycleTests
         Assert.Contains("oven", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(host.Channels.Get("bus"));
         Assert.NotNull(host.Devices.Get<ModbusDevice>("oven"));
+    }
+
+    /// <summary>
+    /// 已取消的删除请求不能先改目录再抛取消，否则调用方会以为操作没发生但拓扑已变。
+    /// </summary>
+    [Fact]
+    public async Task RemoveAsync_WithPreCanceledToken_DoesNotMutateRegistries()
+    {
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddVirtualChannel("bus");
+            builder.AddModbusRtu("oven", "bus");
+        });
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.RemoveDeviceAsync("oven", cts.Token));
+        Assert.NotNull(host.Devices.Get<ModbusDevice>("oven"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.RemoveChannelAsync("bus", cancellationToken: cts.Token));
+        Assert.NotNull(host.Devices.Get<ModbusDevice>("oven"));
+        Assert.NotNull(host.Channels.Get("bus"));
+    }
+
+    /// <summary>
+    /// 运行期新增通道如果请求已取消，不能把可选通道半注册进目录。
+    /// </summary>
+    [Fact]
+    public async Task AddChannelAsync_WithPreCanceledToken_DoesNotRegisterOptionalChannel()
+    {
+        await using var host = ZeusHost.Create();
+        await host.StartAsync();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            host.AddVirtualChannelAsync("late", cancellationToken: cts.Token, startupMode: ChannelStartupMode.Optional));
+
+        Assert.False(host.Channels.TryGet("late", out _));
     }
 
     /// <summary>
@@ -415,12 +568,21 @@ public sealed class LifecycleTests
 
         public bool FailNextWrite { get; set; }
 
+        public bool CancelNextWrite { get; set; }
+
+        public bool DelayOpenUntilCancelled { get; set; }
+
         /// <summary>接下来若干次 OpenCore 抛出异常，用于验证失败后仍会继续退避。</summary>
         public int FailOpenTimes { get; set; }
 
         protected override Task OpenCoreAsync(CancellationToken cancellationToken)
         {
             OpenCount++;
+            if (DelayOpenUntilCancelled)
+            {
+                return Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+
             if (FailOpenTimes > 0)
             {
                 FailOpenTimes--;
@@ -438,6 +600,12 @@ public sealed class LifecycleTests
 
         protected override Task WriteCoreAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
         {
+            if (CancelNextWrite)
+            {
+                CancelNextWrite = false;
+                throw new OperationCanceledException(cancellationToken);
+            }
+
             if (FailNextWrite)
             {
                 FailNextWrite = false;

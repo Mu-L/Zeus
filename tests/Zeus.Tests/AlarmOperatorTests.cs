@@ -85,6 +85,149 @@ public sealed class AlarmOperatorTests
     }
 
     /// <summary>
+    /// 解除抑制时如果点当前仍越限，应立即生成活动报警，不必等待下一次采集刷新。
+    /// </summary>
+    [Fact]
+    public void AlarmTable_UnsuppressRaisesCurrentAlarmImmediately()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        var changes = 0;
+        alarms.Changed += (_, _) => changes++;
+
+        alarms.Suppress("oven.pv");
+        table.Publish("oven.pv", 20d);
+        Assert.Empty(alarms.Active);
+
+        alarms.Unsuppress("oven.pv");
+
+        var alarm = Assert.Single(alarms.Active);
+        Assert.Equal(PointAlarmStatus.Active, alarm.Status);
+        Assert.True(changes > 0);
+    }
+
+    /// <summary>
+    /// 点表尚未注册时按短名抑制，注册后仍应能用同一短名解除。
+    /// </summary>
+    [Fact]
+    public void AlarmTable_UnsuppressRemovesPreRegisteredShortNameSuppression()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+
+        alarms.Suppress("pv");
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        table.Publish("oven.pv", 20d);
+
+        Assert.Empty(alarms.Active);
+        Assert.True(alarms.IsSuppressed("oven.pv"));
+
+        alarms.Unsuppress("pv");
+
+        Assert.False(alarms.IsSuppressed("oven.pv"));
+        Assert.Single(alarms.Active);
+    }
+
+    /// <summary>
+    /// 多台设备共享短名时，预注册短名抑制应能一次解除并恢复所有当前越限点。
+    /// </summary>
+    [Fact]
+    public void AlarmTable_UnsuppressPreRegisteredAmbiguousShortNameRestoresAllMatchingAlarms()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+
+        alarms.Suppress("pv");
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        table.Register(new PointDefinition("pv", "dryer", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        table.Publish("oven.pv", 20d);
+        table.Publish("dryer.pv", 30d);
+
+        Assert.Empty(alarms.Active);
+        Assert.True(alarms.IsSuppressed("oven.pv"));
+        Assert.True(alarms.IsSuppressed("dryer.pv"));
+
+        alarms.Unsuppress("pv");
+
+        Assert.False(alarms.IsSuppressed("oven.pv"));
+        Assert.False(alarms.IsSuppressed("dryer.pv"));
+        Assert.Equal(2, alarms.Active.Count);
+    }
+
+    /// <summary>
+    /// 对已有报警解除抑制也要发布 Changed，否则绑定源不会刷新活动队列。
+    /// </summary>
+    [Fact]
+    public void AlarmTable_UnsuppressExistingAlarmRaisesChanged()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        table.Publish("oven.pv", 20d);
+        alarms.Suppress("oven.pv");
+        var changed = false;
+        alarms.Changed += (_, e) => changed = e.Current is { Status: PointAlarmStatus.Active, Suppressed: false };
+
+        alarms.Unsuppress("oven.pv");
+
+        Assert.True(changed);
+        Assert.Single(alarms.Active);
+    }
+
+    /// <summary>
+    /// 搁置到期应主动通知绑定层刷新，不要求 UI 主动轮询 Active。
+    /// </summary>
+    [Fact]
+    public async Task AlarmTable_ShelveExpiryRaisesChanged()
+    {
+        var table = new PointTable();
+        var alarms = new PointAlarmTable(table);
+        table.Register(new PointDefinition("pv", "oven", PointValueKind.Double, new PointAlarmLimits(high: 10)));
+        table.Publish("oven.pv", 20d);
+        var id = alarms.Active[0].Id;
+        var restored = new TaskCompletionSource<PointAlarmRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
+        alarms.Changed += (_, e) =>
+        {
+            if (e.Current.Status == PointAlarmStatus.Active)
+            {
+                restored.TrySetResult(e.Current);
+            }
+        };
+
+        alarms.Shelve(id, DateTimeOffset.Now.AddMilliseconds(80));
+
+        var record = await restored.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(id, record.Id);
+        Assert.Single(alarms.Active);
+    }
+
+    /// <summary>
+    /// 协议内部超时应映射成协议异常；调用方取消仍保持取消语义。
+    /// </summary>
+    [Fact]
+    public void ProtocolTimeout_DistinguishesTimeoutFromCallerCancellation()
+    {
+        using var timeout = new CancellationTokenSource();
+        timeout.Cancel();
+
+        var protocolError = Assert.Throws<ZeusProtocolException>(() =>
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeout.Token,
+                CancellationToken.None,
+                () => new ZeusProtocolException("超时")));
+        Assert.Equal("超时", protocolError.Message);
+
+        using var caller = new CancellationTokenSource();
+        caller.Cancel();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                caller.Token,
+                caller.Token,
+                () => new ZeusProtocolException("超时")));
+    }
+
+    /// <summary>
     /// 整表绑定源在一轮批次结束时只通知一次。
     /// </summary>
     [Fact]

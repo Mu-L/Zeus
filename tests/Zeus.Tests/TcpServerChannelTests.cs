@@ -74,6 +74,34 @@ public sealed class TcpServerChannelTests
     }
 
     /// <summary>
+    /// 广播取消应保持取消语义，不能误删仍然连接的客户端。
+    /// </summary>
+    [Fact]
+    public async Task TcpServerChannel_BroadcastCancellationDoesNotRemoveClient()
+    {
+        await using var host = ZeusHost.Create(builder => builder.AddTcpServer("server", options =>
+        {
+            options.LocalAddress = "127.0.0.1";
+            options.LocalPort = 0;
+        }));
+        var channel = Assert.IsType<TcpServerChannel>(host.Channels.Get("server"));
+
+        await host.StartAsync();
+        var port = channel.LocalEndPoint?.Port ?? throw new InvalidOperationException("TCP 服务端未绑定端口。");
+        using var client = new TcpClient();
+        await client.ConnectAsync("127.0.0.1", port);
+        await WaitUntilAsync(() => channel.ClientCount == 1);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            channel.BroadcastAsync("PING"u8.ToArray(), cts.Token));
+
+        Assert.Equal(ChannelState.Open, channel.State);
+        Assert.Equal(1, channel.ClientCount);
+    }
+
+    /// <summary>
     /// 带远端的 WriteAsync 应只回复指定客户端，而不是最近发送方。
     /// </summary>
     [Fact]

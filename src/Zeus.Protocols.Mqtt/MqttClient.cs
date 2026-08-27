@@ -360,7 +360,11 @@ public sealed class MqttClient : IAsyncDisposable
         timeoutCts.CancelAfter(_timeout);
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MQTT {operation} 应答。"));
             TaskCompletionSource<bool>? pulse = null;
             List<byte[]> controlWrites;
             List<MqttMessage> events;

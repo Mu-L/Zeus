@@ -132,7 +132,11 @@ public sealed class EtherNetIpClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 {operation} 应答。请检查 PLC IP、端口 44818，或用 EtherNetIpSlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

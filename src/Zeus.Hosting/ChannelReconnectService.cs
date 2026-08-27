@@ -158,10 +158,13 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             return;
         }
 
-        CancellationToken token;
-        CancellationTokenSource cts;
-        TimeSpan delay;
-        int attempt;
+        CancellationToken token = default;
+        CancellationTokenSource? cts = null;
+        TimeSpan delay = default;
+        int attempt = 0;
+        ReconnectStateChangedEventArgs? notification = null;
+        var openCircuit = false;
+        var scheduleReconnect = false;
         lock (_gate)
         {
             if (_attempts.TryGetValue(channel.Name, out var existing) && existing.Pending)
@@ -180,34 +183,64 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
                 {
                     cts = new CancellationTokenSource();
                     _attempts[channel.Name] = new ReconnectAttempt(0, cts, Pending: true);
-                    _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.CircuitOpen, next - 1, circuitDelay));
-                    _ = OpenCircuitAsync(channel, circuitDelay, cts, cts.Token);
-                    return;
+                    token = cts.Token;
+                    delay = circuitDelay;
+                    notification = new ReconnectStateChangedEventArgs(
+                        channel.Name,
+                        ReconnectState.CircuitOpen,
+                        next - 1,
+                        circuitDelay);
+                    openCircuit = true;
                 }
-
-                _attempts.Remove(channel.Name);
-                _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.GaveUp, next - 1));
-                return;
+                else
+                {
+                    _attempts.Remove(channel.Name);
+                    notification = new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.GaveUp, next - 1);
+                }
             }
-
-            cts = new CancellationTokenSource();
-            _attempts[channel.Name] = new ReconnectAttempt(next, cts, Pending: true);
-            token = cts.Token;
-            delay = ComputeDelay(next);
-            attempt = next;
+            else
+            {
+                cts = new CancellationTokenSource();
+                _attempts[channel.Name] = new ReconnectAttempt(next, cts, Pending: true);
+                token = cts.Token;
+                delay = ComputeDelay(next);
+                attempt = next;
+                notification = new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.Scheduled, attempt, delay);
+                scheduleReconnect = true;
+            }
         }
 
-        using (LogScope.Begin(_logger, "Channel", channel.Name))
+        if (notification is null)
         {
-            _logger.LogWarning(
-                ZeusLogEvents.ReconnectScheduled,
-                "通道 {Channel} 已故障，将在 {Delay} ms 后进行第 {Attempt} 次自动重连。",
-                channel.Name,
-                (int)delay.TotalMilliseconds,
-                attempt);
+            return;
         }
-        _options.PublishState(new ReconnectStateChangedEventArgs(channel.Name, ReconnectState.Scheduled, attempt, delay));
-        _ = ReconnectAsync(channel, delay, cts, token);
+
+        if (scheduleReconnect)
+        {
+            using (LogScope.Begin(_logger, "Channel", channel.Name))
+            {
+                _logger.LogWarning(
+                    ZeusLogEvents.ReconnectScheduled,
+                    "通道 {Channel} 已故障，将在 {Delay} ms 后进行第 {Attempt} 次自动重连。",
+                    channel.Name,
+                    (int)delay.TotalMilliseconds,
+                    attempt);
+            }
+        }
+
+        _options.PublishState(notification);
+        if (openCircuit)
+        {
+            _ = OpenCircuitAsync(channel, delay, cts!, token);
+            return;
+        }
+
+        if (!scheduleReconnect)
+        {
+            return;
+        }
+
+        _ = ReconnectAsync(channel, delay, cts!, token);
     }
 
     private async Task OpenCircuitAsync(
@@ -221,6 +254,9 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
         {
         }
         finally
@@ -344,6 +380,7 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
 
     private void CancelAndRemove(string name, bool publishCancelled)
     {
+        ReconnectStateChangedEventArgs? notification = null;
         lock (_gate)
         {
             if (_attempts.Remove(name, out var attempt))
@@ -352,22 +389,33 @@ internal sealed class ChannelReconnectService : IHostedService, IDisposable
                 attempt.Cts.Dispose();
                 if (publishCancelled)
                 {
-                    _options.PublishState(new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count));
+                    notification = new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count);
                 }
             }
+        }
+
+        if (notification is not null)
+        {
+            _options.PublishState(notification);
         }
     }
 
     private void Cancel(string name)
     {
+        ReconnectStateChangedEventArgs? notification = null;
         lock (_gate)
         {
             if (_attempts.TryGetValue(name, out var attempt))
             {
                 attempt.Cts.Cancel();
                 _attempts[name] = attempt with { Pending = false };
-                _options.PublishState(new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count));
+                notification = new ReconnectStateChangedEventArgs(name, ReconnectState.Cancelled, attempt.Count);
             }
+        }
+
+        if (notification is not null)
+        {
+            _options.PublishState(notification);
         }
     }
 

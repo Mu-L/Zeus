@@ -750,6 +750,32 @@ public sealed class ConfigurationTests
     }
 
     /// <summary>
+    /// 已取消的热更新不能只改运行选项后静默成功。
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_WithPreCanceledToken_DoesNotChangeOptions()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"zeus-config-cancel-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(path, ValidJson);
+        try
+        {
+            await using var host = ZeusHost.Create(builder => builder.AddJsonFile(path, watch: false));
+            var updated = ValidJson.Replace("\"intervalMilliseconds\": 200", "\"intervalMilliseconds\": 800", StringComparison.Ordinal);
+            await File.WriteAllTextAsync(path, updated);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ReloadAsync(path, cts.Token));
+
+            Assert.Equal(TimeSpan.FromMilliseconds(200), host.Services.GetRequiredService<AcquisitionOptions>().Interval);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// 热更新应能按 MC 配置指纹重建设备，例如从 3E Binary 切到 4E ASCII。
     /// </summary>
     [Fact]

@@ -63,6 +63,7 @@ public abstract class ChannelBase : IChannel
                 await CloseCoreQuietlyAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            var previousState = State;
             SetState(ChannelState.Opening);
             try
             {
@@ -70,6 +71,12 @@ public abstract class ChannelBase : IChannel
                 SetState(ChannelState.Open);
                 using var scope = BeginChannelScope();
                 _logger.LogInformation(ZeusLogEvents.ChannelOpened, "通道 {Channel} 已打开。", Name);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await CloseCoreQuietlyAsync(CancellationToken.None).ConfigureAwait(false);
+                SetState(previousState);
+                throw;
             }
             catch (Exception ex)
             {
@@ -153,7 +160,7 @@ public abstract class ChannelBase : IChannel
             {
                 await WriteCoreAsync(buffer, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not ZeusException)
+            catch (Exception ex) when (ex is not ZeusException and not OperationCanceledException)
             {
                 SetState(ChannelState.Faulted, ex);
                 using var scope = BeginChannelScope();
@@ -201,7 +208,7 @@ public abstract class ChannelBase : IChannel
             {
                 await write(cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not ZeusException)
+            catch (Exception ex) when (ex is not ZeusException and not OperationCanceledException)
             {
                 SetState(ChannelState.Faulted, ex);
                 using var scope = BeginChannelScope();
@@ -362,6 +369,10 @@ public abstract class ChannelBase : IChannel
         try
         {
             await CloseCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

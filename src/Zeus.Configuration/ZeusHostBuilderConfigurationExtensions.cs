@@ -161,6 +161,8 @@ public static class ZeusHostBuilderConfigurationExtensions
         ZeusAppConfiguration next,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         ApplyAcquisition(host.Services.GetRequiredService<AcquisitionOptions>(), next.Acquisition);
         ApplyReconnect(host.Services.GetRequiredService<ChannelReconnectOptions>(), next.Reconnect);
         var registry = host.Services.GetRequiredService<IZeusJsonBinderRegistry>();

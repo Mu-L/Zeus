@@ -164,6 +164,7 @@ public sealed class PointTable : IPointTable, IPointTableWriter
     public void Register(PointDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
+        var added = false;
         lock (_gate)
         {
             if (_byQualified.ContainsKey(definition.QualifiedName))
@@ -181,13 +182,12 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 PointQuality.Unknown,
                 sourceTimestamp: null);
             _order.Add(definition.QualifiedName);
+            added = true;
 
             if (_ambiguousShortNames.Contains(definition.Name))
             {
-                return;
             }
-
-            if (_shortToQualified.ContainsKey(definition.Name))
+            else if (_shortToQualified.ContainsKey(definition.Name))
             {
                 _shortToQualified.Remove(definition.Name);
                 _ambiguousShortNames.Add(definition.Name);
@@ -196,6 +196,11 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             {
                 _shortToQualified[definition.Name] = definition.QualifiedName;
             }
+        }
+
+        if (added)
+        {
+            RaiseStructureChanged();
         }
     }
 
@@ -234,13 +239,21 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 throw new ZeusException($"无法写入未登记的点 {qualifiedName}。请先在设备上声明点表。");
             }
 
+            var receivedAt = DateTimeOffset.UtcNow;
             if (existing.Error is null && Equals(existing.Value, value) && existing.Quality == quality)
             {
+                _byQualified[qualifiedName] = new PointSnapshot(
+                    existing.Definition,
+                    value,
+                    receivedAt,
+                    null,
+                    existing.AlarmState,
+                    quality,
+                    sourceTimestamp ?? receivedAt);
                 return;
             }
 
             previous = existing;
-            var receivedAt = DateTimeOffset.UtcNow;
             current = new PointSnapshot(
                 existing.Definition,
                 value,
@@ -281,6 +294,14 @@ public sealed class PointTable : IPointTable, IPointTableWriter
 
             if (string.Equals(existing.Error, error, StringComparison.Ordinal) && existing.Quality == quality)
             {
+                _byQualified[qualifiedName] = new PointSnapshot(
+                    existing.Definition,
+                    existing.Value,
+                    existing.UpdatedAt,
+                    error,
+                    existing.AlarmState,
+                    quality,
+                    sourceTimestamp ?? existing.SourceTimestamp);
                 return;
             }
 
@@ -340,9 +361,15 @@ public sealed class PointTable : IPointTable, IPointTableWriter
             return;
         }
 
+        bool removed;
         lock (_gate)
         {
-            RemoveLocked(qualifiedName.Trim());
+            removed = RemoveLocked(qualifiedName.Trim());
+        }
+
+        if (removed)
+        {
+            RaiseStructureChanged();
         }
     }
 
@@ -355,6 +382,7 @@ public sealed class PointTable : IPointTable, IPointTableWriter
         }
 
         var key = deviceName.Trim();
+        var removed = false;
         lock (_gate)
         {
             var doomed = _order
@@ -363,23 +391,29 @@ public sealed class PointTable : IPointTable, IPointTableWriter
                 .ToArray();
             foreach (var qualified in doomed)
             {
-                RemoveLocked(qualified);
+                removed |= RemoveLocked(qualified);
             }
+        }
+
+        if (removed)
+        {
+            RaiseStructureChanged();
         }
     }
 
     /// <summary>
     /// 在已持有锁的前提下摘除一个点，并重建短名索引。
     /// </summary>
-    private void RemoveLocked(string qualifiedName)
+    private bool RemoveLocked(string qualifiedName)
     {
         if (!_byQualified.Remove(qualifiedName, out var snapshot))
         {
-            return;
+            return false;
         }
 
         _order.Remove(qualifiedName);
         RebuildShortNameIndex(snapshot.Definition.Name);
+        return true;
     }
 
     /// <summary>
@@ -606,6 +640,11 @@ public sealed class PointTable : IPointTable, IPointTableWriter
         {
             BatchChanged?.Invoke(this, new PointBatchChangedEventArgs([args]));
         }
+    }
+
+    private void RaiseStructureChanged()
+    {
+        BatchChanged?.Invoke(this, new PointBatchChangedEventArgs([]));
     }
 
     private static bool MatchesSubscription(string pattern, PointSnapshot snapshot)

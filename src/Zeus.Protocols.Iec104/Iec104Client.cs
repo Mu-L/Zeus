@@ -398,7 +398,11 @@ public sealed class Iec104Client : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new Iec104Exception(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 IEC104 {operation}。请检查 TCP 连接、公共地址或用 Iec104SlaveResponder 联调。"));
             await ServiceTimersLockedAsync(cancellationToken).ConfigureAwait(false);
 
             Iec104Apdu? decoded = null;

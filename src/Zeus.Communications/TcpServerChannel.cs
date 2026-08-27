@@ -92,6 +92,8 @@ public sealed class TcpServerChannel : ChannelBase, ISessionChannel
                 $"通道 {Name} 当前为 {State}，无法广播。请先调用宿主 StartAsync，或检查该通道是否已故障。");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         var clients = _clients.Keys.ToArray();
         if (clients.Length == 0)
         {
@@ -102,6 +104,7 @@ public sealed class TcpServerChannel : ChannelBase, ISessionChannel
         Exception? lastError = null;
         foreach (var client in clients)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_clients.ContainsKey(client))
             {
                 continue;
@@ -115,7 +118,11 @@ public sealed class TcpServerChannel : ChannelBase, ISessionChannel
                 PublishPacketTrace(ChannelTraceDirection.Sent, buffer.Span);
                 sent++;
             }
-            catch (Exception ex) when (ex is not ZeusException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not ZeusException and not OperationCanceledException)
             {
                 lastError = ex;
                 RemoveClient(client);
@@ -267,7 +274,11 @@ public sealed class TcpServerChannel : ChannelBase, ISessionChannel
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             PublishPacketTrace(ChannelTraceDirection.Sent, buffer.Span);
         }
-        catch (Exception ex) when (ex is not ZeusException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not ZeusException and not OperationCanceledException)
         {
             RemoveClient(client);
             throw new ZeusChannelException(Name, $"通道 {Name} 写入 TCP 客户端失败：{ex.Message}。请等待客户端重新发送请求。", ex);

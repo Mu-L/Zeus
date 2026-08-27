@@ -112,7 +112,11 @@ public sealed class HostLinkClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 Host Link {command} 应答。请检查单元号、串口参数、TCP 透传设置，或用 HostLinkSlaveResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

@@ -145,7 +145,11 @@ public sealed class Dlt645Client : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 DL/T 645 0x{command:X2} 应答。请检查表地址、串口参数、前导唤醒字节或用 Dlt645SlaveResponder 联调。"));
             Dlt645Frame? decoded = null;
             Task? dataPulse = null;
             lock (_receive.SyncRoot)

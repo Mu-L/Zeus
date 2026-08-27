@@ -9,5 +9,5 @@ dotnet pack Zeus.sln -c Release -o artifacts/nuget
 dotnet nuget add source "$PWD\artifacts\nuget" --name ZeusLocal
 dotnet pack src/Zeus.Templates/Zeus.Templates.csproj -c Release -o artifacts/template-smoke
 dotnet new uninstall Zeus.Templates
-dotnet new install artifacts/template-smoke/Zeus.Templates.0.20.0.nupkg
+dotnet new install artifacts/template-smoke/Zeus.Templates.0.20.1.nupkg
 ```

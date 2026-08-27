@@ -230,7 +230,12 @@ public sealed class OpcUaClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new OpcUaException(
+                    OpcUaStatusCodes.BadTimeout,
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到 OPC UA {operation} 应答。请检查 TCP 4840、SecurityPolicy None，或用 OpcUaServerResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

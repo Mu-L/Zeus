@@ -154,6 +154,11 @@ internal sealed class ZeusHostRuntime : IZeusHost
                 await channel.OpenAsync(cancellationToken).ConfigureAwait(false);
                 opened.Add(channel);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await CloseOpenedChannelsQuietlyAsync(opened).ConfigureAwait(false);
+                throw;
+            }
             catch (Exception ex)
             {
                 // 打开失败已记入通道 Faulted；可选/降级通道会在运行闸门打开后由自动重连重试。
@@ -172,9 +177,24 @@ internal sealed class ZeusHostRuntime : IZeusHost
 
         if (requiredFailures.Count == 0)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                await CloseOpenedChannelsQuietlyAsync(opened).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             return;
         }
 
+        await CloseOpenedChannelsQuietlyAsync(opened).ConfigureAwait(false);
+
+        throw new ZeusException(
+            $"宿主启动失败：{requiredFailures.Count} 个必需通道未能打开。请检查通道配置，或把非关键通道设为 Optional/DegradedAllowed。",
+            requiredFailures[0]);
+    }
+
+    private async Task CloseOpenedChannelsQuietlyAsync(List<IChannel> opened)
+    {
         foreach (var channel in opened.AsEnumerable().Reverse())
         {
             try
@@ -187,10 +207,6 @@ internal sealed class ZeusHostRuntime : IZeusHost
                 _logger.LogWarning(ZeusLogEvents.ChannelCloseWarning, ex, "宿主启动失败回滚时关闭通道 {Channel} 失败。", channel.Name);
             }
         }
-
-        throw new ZeusException(
-            $"宿主启动失败：{requiredFailures.Count} 个必需通道未能打开。请检查通道配置，或把非关键通道设为 Optional/DegradedAllowed。",
-            requiredFailures[0]);
     }
 
     /// <summary>

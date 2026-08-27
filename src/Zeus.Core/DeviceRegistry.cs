@@ -88,6 +88,8 @@ public sealed class DeviceRegistry : IDeviceRegistry
     /// <inheritdoc />
     public async Task RemoveAsync(string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         IDevice? device;
         lock (_gate)
         {
@@ -110,7 +112,5 @@ public sealed class DeviceRegistry : IDeviceRegistry
         {
             disposable.Dispose();
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
     }
 }

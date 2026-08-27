@@ -130,7 +130,11 @@ public sealed class SnmpClient : IAsyncDisposable
 
         while (true)
         {
-            timeoutCts.Token.ThrowIfCancellationRequested();
+            ProtocolTimeout.ThrowIfCancellationRequested(
+                timeoutCts.Token,
+                cancellationToken,
+                () => new ZeusProtocolException(
+                    $"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到 SNMP 应答。请检查 UDP 161、community 或用 SnmpAgentResponder 联调。"));
             Task dataPulse;
             lock (_receive.SyncRoot)
             {

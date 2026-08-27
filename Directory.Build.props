@@ -13,13 +13,13 @@
     <Product>Zeus</Product>
     <Description>面向 .NET 的 UI 无关上位机开发框架。把复杂留给 Zeus，把简单留给用户。</Description>
     <Copyright>Copyright © Zeus</Copyright>
-    <Version>0.20.0</Version>
+    <Version>0.20.1</Version>
     <NeutralLanguage>zh-Hans</NeutralLanguage>
     <IsPackable>false</IsPackable>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>zeus;host;modbus;mitsubishi;mc;siemens;s7;omron;fins;host-link;panasonic;mewtocol;ethernet-ip;cip;allen-bradley;dlt645;iec104;iec-60870-5-104;mqtt;mqtt311;snmp;snmpv2c;opcua;opc-ua;message-queue;electric-meter;serial;tcp;udp;winforms;wpf;industrial;scada</PackageTags>
-    <PackageReleaseNotes>0.20.0：新增 Zeus.Protocols.OpcUa，支持 opc.tcp、SecurityPolicy None、匿名或用户名密码、会话、批量 Value 读写、NodeId 点表、JSON 配置和虚拟 Server 联调。</PackageReleaseNotes>
+    <PackageReleaseNotes>0.20.1：修复取消与协议超时区分、运行期拓扑回滚、报警搁置/解除抑制、点表时间戳刷新、重连回调与 TCP 服务端广播取消语义。</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/Mokode-dev/Zeus</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Mokode-dev/Zeus</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
