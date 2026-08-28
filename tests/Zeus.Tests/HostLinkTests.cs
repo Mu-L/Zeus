@@ -199,6 +199,36 @@ public sealed class HostLinkTests
     }
 
     /// <summary>
+    /// JSON 同一 Host Link 设备内点名重复必须在加载期报错，不能拖到点表构建阶段。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsDuplicateHostLinkPointNames()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "host-link", "type": "virtual", "options": { "responder": "host-link", "unitId": 0 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "host-link",
+                  "type": "omron-host-link",
+                  "options": { "unitId": 0 },
+                  "points": [
+                    { "name": "temperature", "options": { "area": "dm", "address": 100, "dataType": "word" } },
+                    { "name": "temperature", "options": { "area": "dm", "address": 101, "dataType": "word" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "Host Link 点表配置"));
+        Assert.Contains("重复", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 Host Link 结束码异常。
     /// </summary>
     [Fact]

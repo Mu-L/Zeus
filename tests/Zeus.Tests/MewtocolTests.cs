@@ -201,6 +201,36 @@ public sealed class MewtocolTests
     }
 
     /// <summary>
+    /// JSON 同一 MEWTOCOL 设备内点名重复必须在加载期报错，不能拖到点表构建阶段。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsDuplicateMewtocolPointNames()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "mewtocol",
+                  "type": "panasonic-mewtocol",
+                  "options": { "unitId": 1 },
+                  "points": [
+                    { "name": "temperature", "options": { "area": "dt", "address": 100, "dataType": "word" } },
+                    { "name": "temperature", "options": { "area": "dt", "address": 101, "dataType": "word" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MEWTOCOL 点表配置"));
+        Assert.Contains("重复", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 MEWTOCOL 错误码异常。
     /// </summary>
     [Fact]

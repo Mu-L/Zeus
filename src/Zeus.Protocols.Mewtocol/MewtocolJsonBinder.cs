@@ -25,11 +25,17 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
 
         ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first", path), $"{path}.options.wordOrder");
 
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < device.Points.Count; i++)
         {
             var point = device.Points[i];
             var pointPath = $"{path}.points[{i}]";
             ZeusConfigurationText.EnsureName(point.Name, pointPath);
+            if (!names.Add(point.Name.Trim()))
+            {
+                throw new ZeusException($"{path} 点名 {point.Name} 重复。");
+            }
+
             var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt", pointPath));
             ValidateArea(area, pointPath);
             ReadAddress(point, area, pointPath);
