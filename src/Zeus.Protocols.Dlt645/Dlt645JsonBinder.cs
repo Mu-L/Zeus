@@ -16,6 +16,14 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
         {
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
+
+        for (var i = 0; i < device.Points.Count; i++)
+        {
+            var point = device.Points[i];
+            var pointPath = $"{path}.points[{i}]";
+            ZeusConfigurationText.EnsureName(point.Name, pointPath);
+            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd", pointPath), $"{pointPath}.options.dataType");
+        }
     }
 
     /// <inheritdoc />
@@ -62,10 +70,10 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd"));
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd"), $"point {point.Name}.options.dataType");
                 var id = checked((uint)ZeusConfigurationOptions.GetInt32(point.Options, "address"));
                 var dataLength = ZeusConfigurationOptions.GetInt32(point.Options, "dataLength", 4);
-                if (dataType is "raw")
+                if (dataType == Dlt645DataType.RawBytes)
                 {
                     map.RawBytes(point.Name, id, dataLength);
                 }
@@ -79,5 +87,13 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
                     map.Writable(point.Name);
                 }
             }
+        };
+
+    private static Dlt645DataType ParseDataType(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "bcd" => Dlt645DataType.Bcd,
+            "raw" or "raw-bytes" => Dlt645DataType.RawBytes,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。DL/T 645 可选 bcd、raw。")
         };
 }

@@ -115,6 +115,35 @@ public sealed class Iec104Tests
         Assert.Contains(values, item => item.Address == 100 && item.DataType == Iec104DataType.Scaled && (short)item.Value == 123);
     }
 
+    /// <summary>
+    /// JSON 中 IEC104 dataType 拼写错误必须在加载期报错，不能静默按 scaled 采集。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsInvalidIec104DataType()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "iec-link", "type": "virtual", "options": { "responder": "iec104", "commonAddress": 7 } }
+              ],
+              "devices": [
+                {
+                  "name": "station",
+                  "channel": "iec-link",
+                  "type": "iec104",
+                  "options": { "commonAddress": 7 },
+                  "points": [
+                    { "name": "bad", "options": { "address": 100, "dataType": "scaleed" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "IEC104 dataType 配置"));
+        Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);

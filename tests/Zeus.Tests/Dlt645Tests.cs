@@ -107,6 +107,35 @@ public sealed class Dlt645Tests
     }
 
     /// <summary>
+    /// JSON 中 DL/T 645 dataType 拼写错误必须在加载期报错，不能静默按 BCD 采集。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsInvalidDlt645DataType()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "meter-link", "type": "virtual", "options": { "responder": "dlt645", "meterAddress": "000000000001" } }
+              ],
+              "devices": [
+                {
+                  "name": "meter",
+                  "channel": "meter-link",
+                  "type": "dlt645",
+                  "options": { "meterAddress": "000000000001", "wakeUpPreambleCount": 0 },
+                  "points": [
+                    { "name": "bad", "options": { "address": "0x00000000", "dataType": "bcdd" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "DL/T 645 dataType 配置"));
+        Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 未设置的数据项应暴露为 DL/T 645 异常码。
     /// </summary>
     [Fact]

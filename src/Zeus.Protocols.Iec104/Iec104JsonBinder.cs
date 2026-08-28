@@ -16,6 +16,14 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
         {
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
+
+        for (var i = 0; i < device.Points.Count; i++)
+        {
+            var point = device.Points[i];
+            var pointPath = $"{path}.points[{i}]";
+            ZeusConfigurationText.EnsureName(point.Name, pointPath);
+            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled", pointPath), $"{pointPath}.options.dataType");
+        }
     }
 
     /// <inheritdoc />
@@ -66,24 +74,26 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled"));
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled"), $"point {point.Name}.options.dataType");
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
                 var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
                 var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 switch (dataType)
                 {
-                    case "single-point":
+                    case Iec104DataType.SinglePoint:
                         map.SinglePoint(point.Name, address);
                         break;
-                    case "normalized":
+                    case Iec104DataType.Normalized:
                         map.Normalized(point.Name, address, scale, alarmLimits);
                         break;
-                    case "short-float":
+                    case Iec104DataType.ShortFloat:
                         map.ShortFloat(point.Name, address, scale, alarmLimits);
                         break;
-                    default:
+                    case Iec104DataType.Scaled:
                         map.Scaled(point.Name, address, scale, alarmLimits);
                         break;
+                    default:
+                        throw new ZeusException($"不支持的 IEC104 数据类型：{dataType}。");
                 }
 
                 if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
@@ -91,5 +101,15 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
                     map.Writable(point.Name);
                 }
             }
+        };
+
+    private static Iec104DataType ParseDataType(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "scaled" => Iec104DataType.Scaled,
+            "single-point" => Iec104DataType.SinglePoint,
+            "normalized" => Iec104DataType.Normalized,
+            "short-float" => Iec104DataType.ShortFloat,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。IEC104 可选 scaled、single-point、normalized、short-float。")
         };
 }
