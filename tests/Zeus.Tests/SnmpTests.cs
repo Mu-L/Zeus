@@ -165,6 +165,50 @@ public sealed class SnmpTests
         Assert.Contains("OID", error.Message);
     }
 
+    [Fact]
+    public void AddJson_RejectsEmptySnmpDeviceCommunity()
+    {
+        const string json = """
+            {
+              "channels": [{ "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }],
+              "devices": [{
+                "name": "agent",
+                "channel": "snmp-link",
+                "type": "snmp",
+                "options": { "snmpCommunity": "" },
+                "points": [{ "name": "sysName", "options": { "oid": "1.3.6.1.2.1.1.5.0", "dataType": "text" } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "SNMP 设备配置"));
+        Assert.Contains("snmpCommunity", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("sysName", "1.3.6.1.2.1.1.6.0", "点名")]
+    [InlineData("sysLocation", "1.3.6.1.2.1.1.5.0", "OID")]
+    public void AddJson_RejectsDuplicateSnmpPointDefinitions(string secondName, string secondOid, string expectedMessage)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }],
+              "devices": [{
+                "name": "agent",
+                "channel": "snmp-link",
+                "type": "snmp",
+                "points": [
+                  { "name": "sysName", "options": { "oid": "1.3.6.1.2.1.1.5.0", "dataType": "text" } },
+                  { "name": "{{secondName}}", "options": { "oid": "{{secondOid}}", "dataType": "text" } }
+                ]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "SNMP 点表配置"));
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
