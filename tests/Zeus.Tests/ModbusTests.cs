@@ -122,6 +122,51 @@ public sealed class ModbusTests
     }
 
     /// <summary>
+    /// JSON 中 Modbus unitId 必须在转换成 byte 前校验，避免 256 以上的值回绕成其它从站地址。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsOutOfRangeModbusUnitId()
+    {
+        const string deviceJson = """
+            {
+              "channels": [
+                { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 1, "transport": "rtu" } }
+              ],
+              "devices": [
+                {
+                  "name": "oven",
+                  "channel": "bus",
+                  "type": "modbus-rtu",
+                  "options": { "unitId": 300 }
+                }
+              ]
+            }
+            """;
+
+        var deviceError = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(deviceJson, "Modbus 设备站号配置"));
+        Assert.Contains("unitId", deviceError.Message, StringComparison.Ordinal);
+
+        const string responderJson = """
+            {
+              "channels": [
+                { "name": "bus", "type": "virtual", "options": { "responder": "modbus", "unitId": 300, "transport": "rtu" } }
+              ],
+              "devices": [
+                {
+                  "name": "oven",
+                  "channel": "bus",
+                  "type": "modbus-rtu",
+                  "options": { "unitId": 1 }
+                }
+              ]
+            }
+            """;
+
+        var responderError = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(responderJson, "Modbus 从站站号配置"));
+        Assert.Contains("unitId", responderError.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 功能码 0x0F 应能一次写入多个线圈。
     /// </summary>
     [Fact]

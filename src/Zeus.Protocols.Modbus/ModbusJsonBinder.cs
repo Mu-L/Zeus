@@ -14,6 +14,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateDevice(DeviceConfiguration device, string path)
     {
+        ReadUnitId(device.Options, path);
         if (ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds", path) is <= 0)
         {
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
@@ -31,6 +32,8 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
         {
             throw new ZeusException($"{path}.options.transport「{transportValue}」不受支持。可选 rtu、tcp、ascii。");
         }
+
+        ReadUnitId(channel.Options, path);
     }
 
     /// <inheritdoc />
@@ -83,7 +86,7 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
             return null;
         }
 
-        var unitId = (byte)ZeusConfigurationOptions.GetInt32(channel.Options, "unitId", 1);
+        var unitId = ReadUnitId(channel.Options);
         var transport = ZeusConfigurationOptions.GetString(channel.Options, "transport", "rtu");
         return new ModbusSlaveResponder(unitId, CreateChannelTransport(ZeusConfigurationText.Normalize(transport), transport!));
     }
@@ -98,8 +101,20 @@ public sealed class ModbusJsonBinder : IZeusJsonBinder
     {
         Action<ModbusPointMap>? points = device.Points.Count == 0 ? null : map => ApplyPoints(map, device.Points);
         var timeout = ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : (TimeSpan?)null;
-        var unitId = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1);
+        var unitId = ReadUnitId(device.Options);
         add(device.Name.Trim(), device.Channel.Trim(), unitId, timeout, points);
+    }
+
+    private static byte ReadUnitId(IReadOnlyDictionary<string, System.Text.Json.JsonElement> options, string? path = null)
+    {
+        var unitId = ZeusConfigurationOptions.GetInt32(options, "unitId", 1, path);
+        if (unitId is < byte.MinValue or > byte.MaxValue)
+        {
+            var label = string.IsNullOrWhiteSpace(path) ? "unitId" : $"{path}.options.unitId";
+            throw new ZeusException($"{label} 必须介于 0 与 255 之间。");
+        }
+
+        return (byte)unitId;
     }
 
     private static ModbusTransport CreateDeviceTransport(string normalizedType, string original)
