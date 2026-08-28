@@ -19,14 +19,21 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
-        foreach (var point in device.Points)
+        ParseQos(ZeusConfigurationOptions.GetString(device.Options, "mqttWillQos", "0", path), $"{path}.options.mqttWillQos");
+
+        for (var i = 0; i < device.Points.Count; i++)
         {
+            var point = device.Points[i];
+            var pointPath = $"{path}.points[{i}]";
             var topic = ZeusConfigurationOptions.GetString(point.Options, "topic");
             topic = string.IsNullOrWhiteSpace(topic) ? point.Name : topic.Trim();
             if (topic.Contains('+') || topic.Contains('#'))
             {
                 throw new ZeusException($"{path} 点 {point.Name} 的 topic 不能包含 MQTT 通配符。");
             }
+
+            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text", pointPath), $"{pointPath}.options.dataType");
+            ParseQos(ZeusConfigurationOptions.GetString(point.Options, "mqttQos", "0", pointPath), $"{pointPath}.options.mqttQos");
         }
     }
 
@@ -68,7 +75,7 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
             CleanSession = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttCleanSession", true),
             WillTopic = ZeusConfigurationOptions.GetString(device.Options, "mqttWillTopic"),
             WillPayload = ZeusConfigurationOptions.GetString(device.Options, "mqttWillPayload") is { } payload ? Encoding.UTF8.GetBytes(payload) : null,
-            WillQualityOfService = ParseQos(ZeusConfigurationOptions.GetString(device.Options, "mqttWillQos", "0")),
+            WillQualityOfService = ParseQos(ZeusConfigurationOptions.GetString(device.Options, "mqttWillQos", "0"), "device.options.mqttWillQos"),
             WillRetain = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttWillRetain"),
             MaximumPacketSize = ZeusConfigurationOptions.GetInt32(device.Options, "mqttMaximumPacketSize", 1024 * 1024),
             AutomaticKeepAlive = ZeusConfigurationOptions.GetBoolean(device.Options, "mqttAutomaticKeepAlive", true),
@@ -83,24 +90,24 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
                 var topic = ZeusConfigurationOptions.GetString(point.Options, "topic");
                 topic = string.IsNullOrWhiteSpace(topic) ? point.Name : topic.Trim();
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-                switch (ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text")))
+                switch (ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text"), $"point {point.Name}.options.dataType"))
                 {
-                    case "boolean":
+                    case MqttDataType.Boolean:
                         map.Boolean(point.Name, topic);
                         break;
-                    case "int32":
+                    case MqttDataType.Int32:
                         map.Int32(point.Name, topic, alarmLimits);
                         break;
-                    case "int64":
+                    case MqttDataType.Int64:
                         map.Int64(point.Name, topic, alarmLimits);
                         break;
-                    case "double":
+                    case MqttDataType.Double:
                         map.Double(point.Name, topic, alarmLimits);
                         break;
-                    case "bytes":
+                    case MqttDataType.Bytes:
                         map.Bytes(point.Name, topic);
                         break;
-                    default:
+                    case MqttDataType.Text:
                         map.Text(point.Name, topic);
                         break;
                 }
@@ -110,16 +117,29 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
                     map.Writable(point.Name);
                 }
 
-                map.WithQualityOfService(point.Name, ParseQos(ZeusConfigurationOptions.GetString(point.Options, "mqttQos", "0")));
+                map.WithQualityOfService(point.Name, ParseQos(ZeusConfigurationOptions.GetString(point.Options, "mqttQos", "0"), $"point {point.Name}.options.mqttQos"));
                 map.Retained(point.Name, ZeusConfigurationOptions.GetBoolean(point.Options, "mqttRetain", true));
             }
         };
 
-    private static MqttQualityOfService ParseQos(string? value)
+    private static MqttDataType ParseDataType(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch
         {
+            "" or "text" => MqttDataType.Text,
+            "boolean" => MqttDataType.Boolean,
+            "int32" => MqttDataType.Int32,
+            "int64" => MqttDataType.Int64,
+            "double" => MqttDataType.Double,
+            "bytes" => MqttDataType.Bytes,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。MQTT 可选 text、boolean、int32、int64、double、bytes。")
+        };
+
+    private static MqttQualityOfService ParseQos(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "0" => MqttQualityOfService.AtMostOnce,
             "1" => MqttQualityOfService.AtLeastOnce,
             "2" => MqttQualityOfService.ExactlyOnce,
-            _ => MqttQualityOfService.AtMostOnce
+            _ => throw new ZeusException($"{path}「{value}」不受支持。MQTT QoS 可选 0、1、2。")
         };
 }

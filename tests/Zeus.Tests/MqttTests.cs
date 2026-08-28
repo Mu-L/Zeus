@@ -248,6 +248,38 @@ public sealed class MqttTests
         Assert.Contains("不能包含 MQTT 通配符", error.Message);
     }
 
+    [Theory]
+    [InlineData("dataType", "doubl")]
+    [InlineData("mqttQos", "3")]
+    [InlineData("mqttWillQos", "3")]
+    public void Configuration_RejectsInvalidMqttEnums(string optionName, string value)
+    {
+        var deviceOptions = optionName == "mqttWillQos"
+            ? $"\"mqttClientId\": \"gateway\", \"mqttWillTopic\": \"factory/offline\", \"mqttWillPayload\": \"offline\", \"mqttWillQos\": \"{value}\""
+            : "\"mqttClientId\": \"gateway\"";
+        var pointOptions = optionName switch
+        {
+            "dataType" => $"\"topic\": \"factory/setpoint\", \"dataType\": \"{value}\"",
+            "mqttWillQos" => "\"topic\": \"factory/setpoint\", \"dataType\": \"double\"",
+            _ => $"\"topic\": \"factory/setpoint\", \"dataType\": \"double\", \"{optionName}\": \"{value}\""
+        };
+        var json = $$"""
+            {
+              "channels": [{ "name": "mqtt-link", "type": "virtual", "options": { "responder": "mqtt" } }],
+              "devices": [{
+                "name": "gateway",
+                "channel": "mqtt-link",
+                "type": "mqtt",
+                "options": { {{deviceOptions}} },
+                "points": [{ "name": "setpoint", "options": { {{pointOptions}} } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MQTT 配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
