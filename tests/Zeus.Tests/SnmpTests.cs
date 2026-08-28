@@ -107,6 +107,25 @@ public sealed class SnmpTests
     }
 
     [Fact]
+    public void AddJson_RejectsInvalidSnmpDataType()
+    {
+        const string json = """
+            {
+              "channels": [{ "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }],
+              "devices": [{
+                "name": "agent",
+                "channel": "snmp-link",
+                "type": "snmp",
+                "points": [{ "name": "bad", "options": { "oid": "1.3.6.1.2.1.1.5.0", "dataType": "gauge33" } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "SNMP dataType 配置"));
+        Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Configuration_RejectsInvalidOid()
     {
         const string json = """

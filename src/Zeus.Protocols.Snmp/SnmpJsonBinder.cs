@@ -25,6 +25,8 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"点 {point.Name}.options.oid 不能为空。");
             }
 
+            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text"), $"点 {point.Name}.options.dataType");
+
             // 与原先装载器一致：非法 OID 在装载期抛协议异常，而不是拖到采集。
             _ = SnmpValue.ObjectIdentifier(oid);
         }
@@ -81,32 +83,35 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
             {
                 var oid = ZeusConfigurationOptions.RequireString(point.Options, "oid");
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-                switch (ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text")))
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text"), $"point {point.Name}.options.dataType");
+                switch (dataType)
                 {
-                    case "integer":
+                    case SnmpDataType.Integer:
                         map.Integer(point.Name, oid, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
                         break;
-                    case "gauge32":
+                    case SnmpDataType.Gauge32:
                         map.Gauge32(point.Name, oid, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
                         break;
-                    case "counter32":
+                    case SnmpDataType.Counter32:
                         map.Counter32(point.Name, oid, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
                         break;
-                    case "timeticks":
+                    case SnmpDataType.TimeTicks:
                         map.TimeTicks(point.Name, oid, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
                         break;
-                    case "octet-string":
+                    case SnmpDataType.OctetString:
                         map.OctetString(point.Name, oid);
                         break;
-                    case "oid":
+                    case SnmpDataType.ObjectIdentifier:
                         map.ObjectIdentifier(point.Name, oid);
                         break;
-                    case "ip-address":
+                    case SnmpDataType.IpAddress:
                         map.IpAddress(point.Name, oid);
                         break;
-                    default:
+                    case SnmpDataType.Text:
                         map.Text(point.Name, oid);
                         break;
+                    default:
+                        throw new ZeusException($"不支持的 SNMP 数据类型：{dataType}。");
                 }
 
                 if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
@@ -114,5 +119,19 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
                     map.Writable(point.Name);
                 }
             }
+        };
+
+    private static SnmpDataType ParseDataType(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "text" => SnmpDataType.Text,
+            "integer" => SnmpDataType.Integer,
+            "gauge32" => SnmpDataType.Gauge32,
+            "counter32" => SnmpDataType.Counter32,
+            "timeticks" => SnmpDataType.TimeTicks,
+            "octet-string" => SnmpDataType.OctetString,
+            "oid" => SnmpDataType.ObjectIdentifier,
+            "ip-address" => SnmpDataType.IpAddress,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。SNMP 可选 text、integer、gauge32、counter32、timeticks、octet-string、oid、ip-address。")
         };
 }

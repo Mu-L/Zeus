@@ -30,6 +30,8 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"点 {point.Name}.options.nodeId 不能为空。");
             }
 
+            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"点 {point.Name}.options.dataType");
+
             // 与原先装载器一致：非法 NodeId 在装载期抛协议异常，而不是拖到采集。
             _ = OpcUaNodeId.Parse(nodeId);
         }
@@ -91,7 +93,7 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             {
                 var nodeId = ZeusConfigurationOptions.RequireString(point.Options, "nodeId");
                 var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"));
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"point {point.Name}.options.dataType");
                 map.Typed(point.Name, nodeId, dataType, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
                 if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
                 {
@@ -100,7 +102,7 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             }
         };
 
-    private static OpcUaDataType ParseDataType(string? value)
+    private static OpcUaDataType ParseDataType(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch
         {
             "boolean" or "bool" => OpcUaDataType.Boolean,
@@ -113,9 +115,10 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             "int64" => OpcUaDataType.Int64,
             "uint64" => OpcUaDataType.UInt64,
             "float" or "real" => OpcUaDataType.Float,
+            "" or "double" => OpcUaDataType.Double,
             "string" or "text" => OpcUaDataType.String,
             "datetime" => OpcUaDataType.DateTime,
             "bytestring" or "bytes" => OpcUaDataType.ByteString,
-            _ => OpcUaDataType.Double
+            _ => throw new ZeusException($"{path}「{value}」不受支持。OPC UA 可选 boolean、sbyte、byte、int16、uint16、int32、uint32、int64、uint64、float、double、string、datetime、bytestring。")
         };
 }

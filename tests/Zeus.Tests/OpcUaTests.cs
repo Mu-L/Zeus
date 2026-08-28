@@ -149,6 +149,25 @@ public sealed class OpcUaTests
     }
 
     [Fact]
+    public void AddJson_RejectsInvalidOpcUaDataType()
+    {
+        const string json = """
+            {
+              "channels": [{ "name": "opcua-link", "type": "virtual", "options": { "responder": "opcua" } }],
+              "devices": [{
+                "name": "server",
+                "channel": "opcua-link",
+                "type": "opcua",
+                "points": [{ "name": "bad", "options": { "nodeId": "ns=2;s=Raw", "dataType": "doubl" } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "OPC UA dataType 配置"));
+        Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void NodeId_RoundTripsCommonForms()
     {
         Assert.Equal("i=2258", OpcUaNodeId.Parse("i=2258").ToString());
