@@ -25,7 +25,8 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"点 {point.Name}.options.oid 不能为空。");
             }
 
-            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text"), $"点 {point.Name}.options.dataType");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text"), $"点 {point.Name}.options.dataType");
+            ValidateNumericOptions(point, dataType, $"点 {point.Name}");
 
             // 与原先装载器一致：非法 OID 在装载期抛协议异常，而不是拖到采集。
             _ = SnmpValue.ObjectIdentifier(oid);
@@ -134,4 +135,30 @@ public sealed class SnmpJsonBinder : IZeusJsonBinder
             "ip-address" => SnmpDataType.IpAddress,
             _ => throw new ZeusException($"{path}「{value}」不受支持。SNMP 可选 text、integer、gauge32、counter32、timeticks、octet-string、oid、ip-address。")
         };
+
+    private static void ValidateNumericOptions(PointConfiguration point, SnmpDataType dataType, string path)
+    {
+        var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+        if (scale is { } factor && (factor <= 0 || !double.IsFinite(factor)))
+        {
+            throw new ZeusException($"{path}.options.scale 必须是大于 0 的有限数值。");
+        }
+
+        ZeusConfigurationText.ValidatePointAlarms(point, path);
+        if (SnmpCodec.IsNumeric(dataType))
+        {
+            return;
+        }
+
+        if (scale is not null)
+        {
+            throw new ZeusException($"{path}.options.scale 只能用于 SNMP 数值点。");
+        }
+
+        if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+            || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
+        {
+            throw new ZeusException($"{path}.options.lowAlarmLimit 或 highAlarmLimit 只能用于 SNMP 数值点。");
+        }
+    }
 }

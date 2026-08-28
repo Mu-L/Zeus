@@ -125,6 +125,27 @@ public sealed class SnmpTests
         Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("\"scale\": 0.1", "scale")]
+    [InlineData("\"highAlarmLimit\": 1", "highAlarmLimit")]
+    public void AddJson_RejectsNumericOptionsOnSnmpTextPoint(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "snmp-link", "type": "virtual", "options": { "responder": "snmp" } }],
+              "devices": [{
+                "name": "agent",
+                "channel": "snmp-link",
+                "type": "snmp",
+                "points": [{ "name": "status", "options": { "oid": "1.3.6.1.2.1.1.5.0", "dataType": "text", {{optionJson}} } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "SNMP text 点配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Configuration_RejectsInvalidOid()
     {

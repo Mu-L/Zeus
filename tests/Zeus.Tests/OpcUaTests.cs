@@ -167,6 +167,27 @@ public sealed class OpcUaTests
         Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("\"scale\": 0.1", "scale")]
+    [InlineData("\"highAlarmLimit\": 1", "highAlarmLimit")]
+    public void AddJson_RejectsNumericOptionsOnOpcUaStringPoint(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "opcua-link", "type": "virtual", "options": { "responder": "opcua" } }],
+              "devices": [{
+                "name": "server",
+                "channel": "opcua-link",
+                "type": "opcua",
+                "points": [{ "name": "status", "options": { "nodeId": "ns=2;s=Status", "dataType": "string", {{optionJson}} } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "OPC UA string 点配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void NodeId_RoundTripsCommonForms()
     {

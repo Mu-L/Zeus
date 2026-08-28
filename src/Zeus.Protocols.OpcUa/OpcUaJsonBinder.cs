@@ -30,7 +30,8 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"点 {point.Name}.options.nodeId 不能为空。");
             }
 
-            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"点 {point.Name}.options.dataType");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"点 {point.Name}.options.dataType");
+            ValidateNumericOptions(point, dataType, $"点 {point.Name}");
 
             // 与原先装载器一致：非法 NodeId 在装载期抛协议异常，而不是拖到采集。
             _ = OpcUaNodeId.Parse(nodeId);
@@ -121,4 +122,30 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             "bytestring" or "bytes" => OpcUaDataType.ByteString,
             _ => throw new ZeusException($"{path}「{value}」不受支持。OPC UA 可选 boolean、sbyte、byte、int16、uint16、int32、uint32、int64、uint64、float、double、string、datetime、bytestring。")
         };
+
+    private static void ValidateNumericOptions(PointConfiguration point, OpcUaDataType dataType, string path)
+    {
+        var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+        if (scale is { } factor && (factor <= 0 || !double.IsFinite(factor)))
+        {
+            throw new ZeusException($"{path}.options.scale 必须是大于 0 的有限数值。");
+        }
+
+        ZeusConfigurationText.ValidatePointAlarms(point, path);
+        if (OpcUaCodec.IsNumeric(dataType))
+        {
+            return;
+        }
+
+        if (scale is not null)
+        {
+            throw new ZeusException($"{path}.options.scale 只能用于 OPC UA 数值点。");
+        }
+
+        if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+            || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
+        {
+            throw new ZeusException($"{path}.options.lowAlarmLimit 或 highAlarmLimit 只能用于 OPC UA 数值点。");
+        }
+    }
 }
