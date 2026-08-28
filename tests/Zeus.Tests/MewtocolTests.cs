@@ -231,6 +231,35 @@ public sealed class MewtocolTests
     }
 
     /// <summary>
+    /// JSON 中 MEWTOCOL X 输入区点不能声明为可写，必须在加载期报错。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsWritableMewtocolInputPoint()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "mewtocol",
+                  "type": "panasonic-mewtocol",
+                  "options": { "unitId": 1 },
+                  "points": [
+                    { "name": "input", "options": { "area": "x", "address": 10, "bit": 0, "dataType": "bit", "writable": true } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MEWTOCOL X 输入区配置"));
+        Assert.Contains("writable", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 MEWTOCOL 错误码异常。
     /// </summary>
     [Fact]

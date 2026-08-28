@@ -39,7 +39,12 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt", pointPath));
             ValidateArea(area, pointPath);
             ReadAddress(point, area, pointPath);
-            ValidateBitUsage(point, ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath), $"{pointPath}.options.dataType"), pointPath);
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath), $"{pointPath}.options.dataType");
+            ValidateBitUsage(point, dataType, pointPath);
+            if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable", path: pointPath) && area == "x")
+            {
+                throw new ZeusException($"{pointPath}.options.area 为 X 输入区，该区域只读，不能设置 options.writable: true。");
+            }
         }
     }
 
