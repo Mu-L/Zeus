@@ -167,6 +167,66 @@ public sealed class Dlt645Tests
     }
 
     /// <summary>
+    /// JSON 中 DL/T 645 设备选项应在加载期按客户端约束校验，不能等到通信时才失败。
+    /// </summary>
+    [Theory]
+    [InlineData("\"meterAddress\": \"bad\"", "meterAddress")]
+    [InlineData("\"wakeUpPreambleCount\": 17", "wakeUpPreambleCount")]
+    public void AddJson_RejectsInvalidDlt645DeviceOptions(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [
+                { "name": "meter-link", "type": "virtual", "options": { "responder": "dlt645", "meterAddress": "000000000001" } }
+              ],
+              "devices": [
+                {
+                  "name": "meter",
+                  "channel": "meter-link",
+                  "type": "dlt645",
+                  "options": { {{optionJson}} },
+                  "points": [
+                    { "name": "energy", "options": { "address": "0x00000000" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.ThrowsAny<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "DL/T 645 设备选项配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// JSON 中 DL/T 645 虚拟表计地址应在加载期校验，避免启动虚拟通道时才失败。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsInvalidDlt645ResponderOptions()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "meter-link", "type": "virtual", "options": { "responder": "dlt645", "meterAddress": "bad" } }
+              ],
+              "devices": [
+                {
+                  "name": "meter",
+                  "channel": "meter-link",
+                  "type": "dlt645",
+                  "options": { "meterAddress": "000000000001", "wakeUpPreambleCount": 0 },
+                  "points": [
+                    { "name": "energy", "options": { "address": "0x00000000" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.ThrowsAny<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "DL/T 645 虚拟表计配置"));
+        Assert.Contains("meterAddress", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 未设置的数据项应暴露为 DL/T 645 异常码。
     /// </summary>
     [Fact]

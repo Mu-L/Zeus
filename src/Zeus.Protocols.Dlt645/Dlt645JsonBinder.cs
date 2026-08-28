@@ -17,6 +17,8 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
+        ValidateOptions(Options(device, path), $"{path}.options");
+
         for (var i = 0; i < device.Points.Count; i++)
         {
             var point = device.Points[i];
@@ -29,6 +31,8 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
+        var meterAddress = ZeusConfigurationOptions.GetString(channel.Options, "meterAddress", "000000000001", path)!.Trim();
+        ValidateMeterAddress(meterAddress, $"{path}.options.meterAddress");
     }
 
     /// <inheritdoc />
@@ -56,13 +60,13 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
     private static TimeSpan? Timeout(DeviceConfiguration device)
         => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
-    private static Dlt645Options Options(DeviceConfiguration device)
+    private static Dlt645Options Options(DeviceConfiguration device, string? path = null)
         => new()
         {
-            MeterAddress = ZeusConfigurationOptions.GetString(device.Options, "meterAddress", "000000000001")!.Trim(),
-            WakeUpPreambleCount = ZeusConfigurationOptions.GetInt32(device.Options, "wakeUpPreambleCount", 4),
-            Password = ZeusConfigurationOptions.GetString(device.Options, "password", "00000000")!.Trim(),
-            OperatorCode = ZeusConfigurationOptions.GetString(device.Options, "operatorCode", "00000000")!.Trim()
+            MeterAddress = ZeusConfigurationOptions.GetString(device.Options, "meterAddress", "000000000001", path)!.Trim(),
+            WakeUpPreambleCount = ZeusConfigurationOptions.GetInt32(device.Options, "wakeUpPreambleCount", 4, path),
+            Password = ZeusConfigurationOptions.GetString(device.Options, "password", "00000000", path)!.Trim(),
+            OperatorCode = ZeusConfigurationOptions.GetString(device.Options, "operatorCode", "00000000", path)!.Trim()
         };
 
     private static Action<Dlt645PointMap>? Points(DeviceConfiguration device)
@@ -96,6 +100,36 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
             "raw" or "raw-bytes" => Dlt645DataType.RawBytes,
             _ => throw new ZeusException($"{path}「{value}」不受支持。DL/T 645 可选 bcd、raw。")
         };
+
+    private static void ValidateOptions(Dlt645Options options, string path)
+    {
+        ValidateMeterAddress(options.MeterAddress, $"{path}.meterAddress");
+        if (options.WakeUpPreambleCount is < 0 or > 16)
+        {
+            throw new ZeusException($"{path}.wakeUpPreambleCount 必须介于 0 与 16 之间。");
+        }
+
+        try
+        {
+            _ = Dlt645Codec.EncodeWriteDataRequest(options.MeterAddress, 0, [], options.Password, options.OperatorCode, 0);
+        }
+        catch (ZeusException ex)
+        {
+            throw new ZeusException($"{path}.password 或 operatorCode 无效：{ex.Message}", ex);
+        }
+    }
+
+    private static void ValidateMeterAddress(string meterAddress, string path)
+    {
+        try
+        {
+            Dlt645Codec.ValidateAddress(meterAddress);
+        }
+        catch (ZeusException ex)
+        {
+            throw new ZeusException($"{path} 无效：{ex.Message}", ex);
+        }
+    }
 
     private static void ValidatePoint(PointConfiguration point, string path)
     {

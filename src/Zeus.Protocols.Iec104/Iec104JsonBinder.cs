@@ -17,6 +17,8 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
+        ValidateOptions(Options(device, path), $"{path}.options");
+
         for (var i = 0; i < device.Points.Count; i++)
         {
             var point = device.Points[i];
@@ -29,6 +31,9 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
     /// <inheritdoc />
     public void ValidateResponder(ChannelConfiguration channel, string path)
     {
+        ValidateOptions(
+            new Iec104Options { CommonAddress = ZeusConfigurationOptions.GetInt32(channel.Options, "commonAddress", 1, path) },
+            $"{path}.options");
     }
 
     /// <inheritdoc />
@@ -56,17 +61,17 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
     private static TimeSpan? Timeout(DeviceConfiguration device)
         => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
-    private static Iec104Options Options(DeviceConfiguration device)
+    private static Iec104Options Options(DeviceConfiguration device, string? path = null)
         => new()
         {
-            CommonAddress = ZeusConfigurationOptions.GetInt32(device.Options, "commonAddress", 1),
-            OriginatorAddress = ZeusConfigurationOptions.GetInt32(device.Options, "originatorAddress"),
-            InterrogationQualifier = ZeusConfigurationOptions.GetInt32(device.Options, "interrogationQualifier", 20),
-            T1 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t1Milliseconds", 15000)),
-            T2 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t2Milliseconds", 10000)),
-            T3 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t3Milliseconds", 20000)),
-            MaxUnacknowledgedIFrames = ZeusConfigurationOptions.GetInt32(device.Options, "maxUnacknowledgedIFrames", 12),
-            AcknowledgeWindow = ZeusConfigurationOptions.GetInt32(device.Options, "acknowledgeWindow", 8)
+            CommonAddress = ZeusConfigurationOptions.GetInt32(device.Options, "commonAddress", 1, path),
+            OriginatorAddress = ZeusConfigurationOptions.GetInt32(device.Options, "originatorAddress", path: path),
+            InterrogationQualifier = ZeusConfigurationOptions.GetInt32(device.Options, "interrogationQualifier", 20, path),
+            T1 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t1Milliseconds", 15000, path)),
+            T2 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t2Milliseconds", 10000, path)),
+            T3 = TimeSpan.FromMilliseconds(ZeusConfigurationOptions.GetInt32(device.Options, "t3Milliseconds", 20000, path)),
+            MaxUnacknowledgedIFrames = ZeusConfigurationOptions.GetInt32(device.Options, "maxUnacknowledgedIFrames", 12, path),
+            AcknowledgeWindow = ZeusConfigurationOptions.GetInt32(device.Options, "acknowledgeWindow", 8, path)
         };
 
     private static Action<Iec104PointMap>? Points(DeviceConfiguration device)
@@ -112,6 +117,18 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
             "short-float" => Iec104DataType.ShortFloat,
             _ => throw new ZeusException($"{path}「{value}」不受支持。IEC104 可选 scaled、single-point、normalized、short-float。")
         };
+
+    private static void ValidateOptions(Iec104Options options, string path)
+    {
+        try
+        {
+            Iec104Codec.ValidateOptions(options);
+        }
+        catch (ZeusException ex)
+        {
+            throw new ZeusException($"{path} 无效：{ex.Message}", ex);
+        }
+    }
 
     private static void ValidatePoint(PointConfiguration point, string path)
     {

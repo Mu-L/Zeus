@@ -175,6 +175,68 @@ public sealed class Iec104Tests
         Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// JSON 中 IEC104 设备选项应在加载期按协议约束校验，不能等到客户端创建或编码时才失败。
+    /// </summary>
+    [Theory]
+    [InlineData("\"commonAddress\": 70000", "commonAddress")]
+    [InlineData("\"originatorAddress\": 300", "originatorAddress")]
+    [InlineData("\"t1Milliseconds\": 1000, \"t2Milliseconds\": 1000", "t2")]
+    [InlineData("\"maxUnacknowledgedIFrames\": 8, \"acknowledgeWindow\": 8", "acknowledgeWindow")]
+    public void AddJson_RejectsInvalidIec104DeviceOptions(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [
+                { "name": "iec-link", "type": "virtual", "options": { "responder": "iec104", "commonAddress": 7 } }
+              ],
+              "devices": [
+                {
+                  "name": "station",
+                  "channel": "iec-link",
+                  "type": "iec104",
+                  "options": { {{optionJson}} },
+                  "points": [
+                    { "name": "running", "options": { "address": 1, "dataType": "single-point" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.ThrowsAny<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "IEC104 设备选项配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// JSON 中 IEC104 虚拟站 commonAddress 应在加载期校验，避免创建虚拟通道时才失败。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsInvalidIec104ResponderOptions()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "iec-link", "type": "virtual", "options": { "responder": "iec104", "commonAddress": 70000 } }
+              ],
+              "devices": [
+                {
+                  "name": "station",
+                  "channel": "iec-link",
+                  "type": "iec104",
+                  "options": { "commonAddress": 7 },
+                  "points": [
+                    { "name": "running", "options": { "address": 1, "dataType": "single-point" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.ThrowsAny<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "IEC104 虚拟站配置"));
+        Assert.Contains("commonAddress", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
