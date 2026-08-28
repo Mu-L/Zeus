@@ -107,6 +107,71 @@ public sealed class MewtocolTests
     }
 
     /// <summary>
+    /// JSON 声明的 32 位点必须按 dataType 和 wordOrder 解析，不能退化为 16 位 word。
+    /// </summary>
+    [Fact]
+    public async Task AddJson_HonorsTypedMewtocolPointWordOrder()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "mewtocol",
+                  "type": "panasonic-mewtocol",
+                  "options": { "unitId": 1, "wordOrder": "low-word-first" },
+                  "points": [
+                    { "name": "counter", "options": { "area": "dt", "address": 120, "dataType": "uint32" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        await using var host = ZeusHost.Create(builder => builder.AddJson(json, "MEWTOCOL 32 位配置"));
+        await host.StartAsync();
+        var plc = host.Devices.Get<MewtocolDevice>("plc");
+
+        await plc.WriteDataRegistersAsync(120, [0x5678, 0x1234]);
+        var result = Assert.Single(await plc.ReadAsync());
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(0x12345678u, Assert.IsType<uint>(result.Value));
+    }
+
+    /// <summary>
+    /// JSON 中 MEWTOCOL dataType 拼写错误必须在加载期报错，不能静默按 word 采集。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsInvalidMewtocolDataType()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "mewtocol",
+                  "type": "panasonic-mewtocol",
+                  "options": { "unitId": 1 },
+                  "points": [
+                    { "name": "bad", "options": { "area": "dt", "address": 120, "dataType": "rea1" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MEWTOCOL dataType 配置"));
+        Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// JSON 位偏移必须在转换成 byte 之前校验，避免 256 等值回绕成 0。
     /// </summary>
     [Fact]

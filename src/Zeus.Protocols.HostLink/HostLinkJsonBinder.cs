@@ -23,6 +23,8 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
+        ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first", path), $"{path}.options.wordOrder");
+
         for (var i = 0; i < device.Points.Count; i++)
         {
             var point = device.Points[i];
@@ -35,7 +37,7 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
 
             ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area", path: pointPath));
             ReadAddress(point, pointPath);
-            ValidateBitUsage(point, ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath)), pointPath);
+            ValidateBitUsage(point, ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath), $"{pointPath}.options.dataType"), pointPath);
         }
     }
 
@@ -78,9 +80,7 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
         => new()
         {
             UnitNumber = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1),
-            WordOrder = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first")) == "low-word-first"
-                ? HostLinkWordOrder.LowWordFirst
-                : HostLinkWordOrder.HighWordFirst
+            WordOrder = ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first"), "device.options.wordOrder")
         };
 
     private static Action<HostLinkPointMap>? Points(DeviceConfiguration device)
@@ -89,22 +89,41 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             foreach (var point in device.Points)
             {
                 var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"));
-                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"), $"point {point.Name}.options.dataType");
                 ValidateBitUsage(point, dataType, $"point {point.Name}");
                 var address = ReadAddress(point, $"point {point.Name}");
                 var bitOffset = ReadBitOffset(point, $"point {point.Name}");
                 var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
-                if (dataType is "bit")
+                switch (dataType)
                 {
-                    map.Bit(point.Name, area, address, bitOffset);
-                }
-                else if (scale is { } wordScale)
-                {
-                    map.Word(point.Name, area, address, wordScale);
-                }
-                else
-                {
-                    map.Word(point.Name, area, address);
+                    case HostLinkDataType.Bit:
+                        map.Bit(point.Name, area, address, bitOffset);
+                        break;
+                    case HostLinkDataType.Int16:
+                        map.Int16(point.Name, area, address, scale);
+                        break;
+                    case HostLinkDataType.UInt32:
+                        map.UInt32(point.Name, area, address, scale);
+                        break;
+                    case HostLinkDataType.Int32:
+                        map.Int32(point.Name, area, address, scale);
+                        break;
+                    case HostLinkDataType.Real:
+                        map.Real(point.Name, area, address, scale);
+                        break;
+                    case HostLinkDataType.Word:
+                        if (scale is { } wordScale)
+                        {
+                            map.Word(point.Name, area, address, wordScale);
+                        }
+                        else
+                        {
+                            map.Word(point.Name, area, address);
+                        }
+
+                        break;
+                    default:
+                        throw new ZeusException($"不支持的 Host Link 数据类型：{dataType}。");
                 }
 
                 if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
@@ -123,6 +142,26 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             "ar" => HostLinkArea.Auxiliary,
             "dm" => HostLinkArea.DataMemory,
             _ => throw new ZeusException($"Host Link area「{value}」不受支持。")
+        };
+
+    private static HostLinkDataType ParseDataType(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "word" => HostLinkDataType.Word,
+            "bit" => HostLinkDataType.Bit,
+            "int16" => HostLinkDataType.Int16,
+            "uint32" => HostLinkDataType.UInt32,
+            "int32" => HostLinkDataType.Int32,
+            "real" => HostLinkDataType.Real,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。Host Link 可选 word、bit、int16、uint32、int32、real。")
+        };
+
+    private static HostLinkWordOrder ParseWordOrder(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "high-word-first" => HostLinkWordOrder.HighWordFirst,
+            "low-word-first" => HostLinkWordOrder.LowWordFirst,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。Host Link wordOrder 可选 high-word-first、low-word-first。")
         };
 
     private static ushort ReadAddress(PointConfiguration point, string path)
@@ -147,9 +186,9 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
         return (byte)bitOffset;
     }
 
-    private static void ValidateBitUsage(PointConfiguration point, string dataType, string path)
+    private static void ValidateBitUsage(PointConfiguration point, HostLinkDataType dataType, string path)
     {
-        if (dataType is "bit")
+        if (dataType == HostLinkDataType.Bit)
         {
             ReadBitOffset(point, path);
             return;

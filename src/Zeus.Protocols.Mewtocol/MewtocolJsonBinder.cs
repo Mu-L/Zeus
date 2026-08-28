@@ -23,6 +23,8 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
 
+        ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first", path), $"{path}.options.wordOrder");
+
         for (var i = 0; i < device.Points.Count; i++)
         {
             var point = device.Points[i];
@@ -31,7 +33,7 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt", pointPath));
             ValidateArea(area, pointPath);
             ReadAddress(point, area, pointPath);
-            ValidateBitUsage(point, ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath)), pointPath);
+            ValidateBitUsage(point, ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath), $"{pointPath}.options.dataType"), pointPath);
         }
     }
 
@@ -71,7 +73,11 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
         => ZeusConfigurationOptions.GetNullableInt32(device.Options, "timeoutMilliseconds") is { } ms ? TimeSpan.FromMilliseconds(ms) : null;
 
     private static MewtocolOptions Options(DeviceConfiguration device)
-        => new() { StationNumber = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1) };
+        => new()
+        {
+            StationNumber = (byte)ZeusConfigurationOptions.GetInt32(device.Options, "unitId", 1),
+            WordOrder = ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first"), "device.options.wordOrder")
+        };
 
     private static Action<MewtocolPointMap>? Points(DeviceConfiguration device)
         => device.Points.Count == 0 ? null : map =>
@@ -79,7 +85,7 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             foreach (var point in device.Points)
             {
                 var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt"));
-                var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
+                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"), $"point {point.Name}.options.dataType");
                 ValidateArea(area, $"point {point.Name}");
                 ValidateBitUsage(point, dataType, $"point {point.Name}");
                 var address = ReadAddress(point, area, $"point {point.Name}");
@@ -95,17 +101,36 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                         "r" => MewtocolContactArea.InternalRelay,
                         _ => throw new ZeusException($"MEWTOCOL area「{area}」不受支持。")
                     };
-                    if (dataType is "bit")
+                    switch (dataType)
                     {
-                        map.Bit(point.Name, contact, address, bitOffset);
-                    }
-                    else if (scale is { } wordScale)
-                    {
-                        map.Word(point.Name, contact, address, wordScale);
-                    }
-                    else
-                    {
-                        map.Word(point.Name, contact, address);
+                        case MewtocolDataType.Bit:
+                            map.Bit(point.Name, contact, address, bitOffset);
+                            break;
+                        case MewtocolDataType.Int16:
+                            map.Int16(point.Name, contact, address, scale);
+                            break;
+                        case MewtocolDataType.UInt32:
+                            map.UInt32(point.Name, contact, address, scale);
+                            break;
+                        case MewtocolDataType.Int32:
+                            map.Int32(point.Name, contact, address, scale);
+                            break;
+                        case MewtocolDataType.Real:
+                            map.Real(point.Name, contact, address, scale);
+                            break;
+                        case MewtocolDataType.Word:
+                            if (scale is { } wordScale)
+                            {
+                                map.Word(point.Name, contact, address, wordScale);
+                            }
+                            else
+                            {
+                                map.Word(point.Name, contact, address);
+                            }
+
+                            break;
+                        default:
+                            throw new ZeusException($"不支持的 MEWTOCOL 数据类型：{dataType}。");
                     }
                 }
                 else
@@ -117,17 +142,36 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                         "fl" => MewtocolDataArea.FileRegister,
                         _ => throw new ZeusException($"MEWTOCOL area「{area}」不受支持。")
                     };
-                    if (dataType is "bit")
+                    switch (dataType)
                     {
-                        map.Bit(point.Name, data, address, bitOffset);
-                    }
-                    else if (scale is { } dataScale)
-                    {
-                        map.Word(point.Name, data, address, dataScale);
-                    }
-                    else
-                    {
-                        map.Word(point.Name, data, address);
+                        case MewtocolDataType.Bit:
+                            map.Bit(point.Name, data, address, bitOffset);
+                            break;
+                        case MewtocolDataType.Int16:
+                            map.Int16(point.Name, data, address, scale);
+                            break;
+                        case MewtocolDataType.UInt32:
+                            map.UInt32(point.Name, data, address, scale);
+                            break;
+                        case MewtocolDataType.Int32:
+                            map.Int32(point.Name, data, address, scale);
+                            break;
+                        case MewtocolDataType.Real:
+                            map.Real(point.Name, data, address, scale);
+                            break;
+                        case MewtocolDataType.Word:
+                            if (scale is { } dataScale)
+                            {
+                                map.Word(point.Name, data, address, dataScale);
+                            }
+                            else
+                            {
+                                map.Word(point.Name, data, address);
+                            }
+
+                            break;
+                        default:
+                            throw new ZeusException($"不支持的 MEWTOCOL 数据类型：{dataType}。");
                     }
                 }
 
@@ -145,6 +189,26 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.area「{area}」不受支持。MEWTOCOL 可选 dt、ld、fl、x、y、r、l。");
         }
     }
+
+    private static MewtocolDataType ParseDataType(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "word" => MewtocolDataType.Word,
+            "bit" => MewtocolDataType.Bit,
+            "int16" => MewtocolDataType.Int16,
+            "uint32" => MewtocolDataType.UInt32,
+            "int32" => MewtocolDataType.Int32,
+            "real" => MewtocolDataType.Real,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。MEWTOCOL 可选 word、bit、int16、uint32、int32、real。")
+        };
+
+    private static MewtocolWordOrder ParseWordOrder(string? value, string path)
+        => ZeusConfigurationText.Normalize(value) switch
+        {
+            "" or "high-word-first" => MewtocolWordOrder.HighWordFirst,
+            "low-word-first" => MewtocolWordOrder.LowWordFirst,
+            _ => throw new ZeusException($"{path}「{value}」不受支持。MEWTOCOL wordOrder 可选 high-word-first、low-word-first。")
+        };
 
     private static int ReadAddress(PointConfiguration point, string area, string path)
     {
@@ -178,9 +242,9 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
         return (byte)bitOffset;
     }
 
-    private static void ValidateBitUsage(PointConfiguration point, string dataType, string path)
+    private static void ValidateBitUsage(PointConfiguration point, MewtocolDataType dataType, string path)
     {
-        if (dataType is "bit")
+        if (dataType == MewtocolDataType.Bit)
         {
             ReadBitOffset(point, path);
             return;
