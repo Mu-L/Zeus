@@ -305,6 +305,32 @@ public sealed class MqttTests
         Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("text", "\"highAlarmLimit\": 1", "highAlarmLimit")]
+    [InlineData("boolean", "\"lowAlarmLimit\": 0", "lowAlarmLimit")]
+    [InlineData("bytes", "\"deadband\": 1", "deadband")]
+    [InlineData("double", "\"scale\": 0.1", "scale")]
+    public void Configuration_RejectsIgnoredMqttPointOptions(string dataType, string optionJson, string expectedMessage)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "mqtt-link", "type": "virtual", "options": { "responder": "mqtt" } }],
+              "devices": [{
+                "name": "gateway",
+                "channel": "mqtt-link",
+                "type": "mqtt",
+                "points": [{
+                  "name": "setpoint",
+                  "options": { "topic": "factory/setpoint", "dataType": "{{dataType}}", {{optionJson}} }
+                }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MQTT 点选项配置"));
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);

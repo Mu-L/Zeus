@@ -33,7 +33,8 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
                 throw new ZeusException($"{path} 点 {point.Name} 的 topic 不能包含 MQTT 通配符。");
             }
 
-            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text", pointPath), $"{pointPath}.options.dataType");
+            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "text", pointPath), $"{pointPath}.options.dataType");
+            ValidatePointOptions(point, dataType, pointPath);
             ParseQos(ZeusConfigurationOptions.GetString(point.Options, "mqttQos", "0", pointPath), $"{pointPath}.options.mqttQos");
         }
     }
@@ -167,6 +168,27 @@ public sealed class MqttJsonBinder : IZeusJsonBinder
         catch (ZeusException ex)
         {
             throw new ZeusException($"{path} 无效：{ex.Message}", ex);
+        }
+    }
+
+    private static void ValidatePointOptions(PointConfiguration point, MqttDataType dataType, string path)
+    {
+        if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path) is not null)
+        {
+            throw new ZeusException($"{path}.options.scale 不适用于 MQTT 点。MQTT 载荷按文本直接解析，不执行 scale 换算。");
+        }
+
+        ZeusConfigurationText.ValidatePointAlarms(point, path);
+        if (dataType is MqttDataType.Int32 or MqttDataType.Int64 or MqttDataType.Double)
+        {
+            return;
+        }
+
+        if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+            || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null
+            || ZeusConfigurationOptions.Contains(point.Options, "deadband"))
+        {
+            throw new ZeusException($"{path}.options.lowAlarmLimit、highAlarmLimit 或 deadband 只能用于 MQTT 数值点。");
         }
     }
 }
