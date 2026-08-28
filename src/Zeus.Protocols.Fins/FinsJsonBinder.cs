@@ -123,25 +123,41 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
             var address = ReadAddress(point, $"point {point.Name}");
             var bitOffset = ReadBitOffset(point, $"point {point.Name}");
             var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
-            if (dataType == FinsDataType.Bit)
+            switch (dataType)
             {
-                map.Bit(point.Name, area, address, bitOffset);
-            }
-            else if (scale is { } wordScale)
-            {
-                map.Word(point.Name, area, address, wordScale);
-                if (alarmLimits is not null)
-                {
-                    map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
-                }
-            }
-            else
-            {
-                map.Word(point.Name, area, address);
-                if (alarmLimits is not null)
-                {
-                    map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
-                }
+                case FinsDataType.Bit:
+                    map.Bit(point.Name, area, address, bitOffset);
+                    break;
+                case FinsDataType.Int16:
+                    map.Int16(point.Name, area, address, scale, alarmLimits);
+                    break;
+                case FinsDataType.UInt32:
+                    map.UInt32(point.Name, area, address, scale, alarmLimits);
+                    break;
+                case FinsDataType.Int32:
+                    map.Int32(point.Name, area, address, scale, alarmLimits);
+                    break;
+                case FinsDataType.Real:
+                    map.Real(point.Name, area, address, scale, alarmLimits);
+                    break;
+                case FinsDataType.Word:
+                    if (scale is { } wordScale)
+                    {
+                        map.Word(point.Name, area, address, wordScale);
+                    }
+                    else
+                    {
+                        map.Word(point.Name, area, address);
+                    }
+
+                    if (alarmLimits is not null)
+                    {
+                        map.WithAlarmLimits(point.Name, alarmLimits.Low, alarmLimits.High);
+                    }
+
+                    break;
+                default:
+                    throw new ZeusException($"不支持的 FINS 数据类型：{dataType}。");
             }
 
             if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))

@@ -394,11 +394,11 @@ internal static class FinsCodec
 
         object raw = dataType switch
         {
-            FinsDataType.Word => words[0],
-            FinsDataType.Int16 => unchecked((short)words[0]),
-            FinsDataType.UInt32 => CombineUInt32(words[0], words[1], wordOrder),
-            FinsDataType.Int32 => unchecked((int)CombineUInt32(words[0], words[1], wordOrder)),
-            FinsDataType.Real => BitConverter.Int32BitsToSingle(unchecked((int)CombineUInt32(words[0], words[1], wordOrder))),
+            FinsDataType.Word => (object)words[0],
+            FinsDataType.Int16 => (object)unchecked((short)words[0]),
+            FinsDataType.UInt32 => (object)CombineUInt32(words[0], words[1], wordOrder),
+            FinsDataType.Int32 => (object)unchecked((int)CombineUInt32(words[0], words[1], wordOrder)),
+            FinsDataType.Real => (object)BitConverter.Int32BitsToSingle(unchecked((int)CombineUInt32(words[0], words[1], wordOrder))),
             _ => throw new ZeusProtocolException($"不支持的 FINS 数据类型：{dataType}。")
         };
 

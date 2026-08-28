@@ -141,10 +141,46 @@ public sealed class FinsTests
         var plc = host.Devices.Get<FinsDevice>("plc");
 
         await plc.WriteDataMemoryWordsAsync(100, [315]);
-        Assert.Equal(31.5, await WaitForPointAsync<double>(host, "temperature"), 3);
+        Assert.Equal(31.5, await WaitForPointValueAsync(host, "temperature", 31.5), 3);
 
         await host.Points.WriteAsync("running", true);
         Assert.True((await plc.ReadCioBitsAsync(10, 0, 1))[0]);
+    }
+
+    /// <summary>
+    /// JSON 声明的 32 位点必须按 dataType 和 wordOrder 解析，不能退化为 16 位 word。
+    /// </summary>
+    [Fact]
+    public async Task AddJson_HonorsTypedFinsPointWordOrder()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "fins-link", "type": "virtual", "options": { "responder": "fins", "transport": "udp" } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "fins-link",
+                  "type": "omron-fins",
+                  "options": { "transport": "udp", "sourceNode": 10, "destinationNode": 1, "wordOrder": "low-word-first" },
+                  "points": [
+                    { "name": "counter", "options": { "area": "dm", "address": 120, "dataType": "uint32" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        await using var host = ZeusHost.Create(builder => builder.AddJson(json, "FINS 32 位配置"));
+        await host.StartAsync();
+        var plc = host.Devices.Get<FinsDevice>("plc");
+
+        await plc.WriteDataMemoryWordsAsync(120, [0x5678, 0x1234]);
+        var result = Assert.Single(await plc.ReadAsync());
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(0x12345678u, Assert.IsType<uint>(result.Value));
     }
 
     /// <summary>
@@ -264,5 +300,21 @@ public sealed class FinsTests
         }
 
         throw new TimeoutException($"等待点 {name} 超时。");
+    }
+
+    private static async Task<double> WaitForPointValueAsync(IZeusHost host, string name, double expected)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (host.Points.TryGet<double>(name, out var value) && Math.Abs(value - expected) < 0.0001)
+            {
+                return value;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"等待点 {name} 更新为 {expected} 超时。");
     }
 }
