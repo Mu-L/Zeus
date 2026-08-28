@@ -19,6 +19,7 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
 
         ParseWordOrder(ZeusConfigurationOptions.GetString(device.Options, "wordOrder", "high-word-first", path), $"{path}.options.wordOrder");
         ParseTransport(ZeusConfigurationOptions.GetString(device.Options, "transport", "udp", path), $"{path}.options.transport");
+        ValidateByteOptions(device, path);
         ValidatePoints(device.Points, path);
     }
 
@@ -72,15 +73,15 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
     private static FinsOptions Options(DeviceConfiguration device)
         => new()
         {
-            DestinationNetwork = (byte)GetInt32(device, "destinationNetwork"),
-            DestinationNode = (byte)GetInt32(device, "destinationNode"),
-            DestinationUnit = (byte)GetInt32(device, "destinationUnit"),
-            SourceNetwork = (byte)GetInt32(device, "sourceNetwork"),
-            SourceNode = (byte)GetInt32(device, "sourceNode"),
-            SourceUnit = (byte)GetInt32(device, "sourceUnit"),
-            GatewayCount = (byte)GetInt32(device, "gatewayCount", 2),
-            InformationControlField = (byte)GetInt32(device, "informationControlField", 0x80),
-            TcpRequestedClientNode = (byte)GetInt32(device, "tcpRequestedClientNode"),
+            DestinationNetwork = ReadByte(device, "destinationNetwork"),
+            DestinationNode = ReadByte(device, "destinationNode"),
+            DestinationUnit = ReadByte(device, "destinationUnit"),
+            SourceNetwork = ReadByte(device, "sourceNetwork"),
+            SourceNode = ReadByte(device, "sourceNode"),
+            SourceUnit = ReadByte(device, "sourceUnit"),
+            GatewayCount = ReadByte(device, "gatewayCount", 2),
+            InformationControlField = ReadByte(device, "informationControlField", 0x80),
+            TcpRequestedClientNode = ReadByte(device, "tcpRequestedClientNode"),
             UseTcpNodeAddressHandshake = ZeusConfigurationOptions.GetBoolean(device.Options, "useTcpNodeAddressHandshake", true),
             WordOrder = ParseWordOrder(GetString(device, "wordOrder", "high-word-first"), "device.options.wordOrder")
         };
@@ -106,6 +107,8 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
 
             var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", path), $"{path}.options.dataType");
             ParseArea(areaValue, dataType, $"{path}.options.area");
+            ReadAddress(point, path);
+            ValidateBitUsage(point, dataType, path);
             ZeusConfigurationText.ValidatePointAlarms(point, path);
         }
     }
@@ -117,8 +120,8 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
             var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"), $"point {point.Name}.options.dataType");
             var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"), dataType, $"point {point.Name}.options.area");
             var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-            var address = (ushort)ZeusConfigurationOptions.GetInt32(point.Options, "address");
-            var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+            var address = ReadAddress(point, $"point {point.Name}");
+            var bitOffset = ReadBitOffset(point, $"point {point.Name}");
             var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
             if (dataType == FinsDataType.Bit)
             {
@@ -153,6 +156,67 @@ public sealed class FinsJsonBinder : IZeusJsonBinder
 
     private static int GetInt32(DeviceConfiguration device, string name, int defaultValue = 0)
         => ZeusConfigurationOptions.GetInt32(device.Options, name, defaultValue);
+
+    private static void ValidateByteOptions(DeviceConfiguration device, string path)
+    {
+        ReadByte(device, "destinationNetwork", path: path);
+        ReadByte(device, "destinationNode", path: path);
+        ReadByte(device, "destinationUnit", path: path);
+        ReadByte(device, "sourceNetwork", path: path);
+        ReadByte(device, "sourceNode", path: path);
+        ReadByte(device, "sourceUnit", path: path);
+        ReadByte(device, "gatewayCount", 2, path);
+        ReadByte(device, "informationControlField", 0x80, path);
+        ReadByte(device, "tcpRequestedClientNode", path: path);
+    }
+
+    private static byte ReadByte(DeviceConfiguration device, string name, int defaultValue = 0, string? path = null)
+    {
+        var value = ZeusConfigurationOptions.GetInt32(device.Options, name, defaultValue, path);
+        if (value is < byte.MinValue or > byte.MaxValue)
+        {
+            var label = string.IsNullOrWhiteSpace(path) ? name : $"{path}.options.{name}";
+            throw new ZeusException($"{label} 必须介于 0 与 255 之间。");
+        }
+
+        return (byte)value;
+    }
+
+    private static ushort ReadAddress(PointConfiguration point, string path)
+    {
+        var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+        if (address is < 0 or > ushort.MaxValue)
+        {
+            throw new ZeusException($"{path}.options.address 必须介于 0 与 65535 之间。");
+        }
+
+        return (ushort)address;
+    }
+
+    private static byte ReadBitOffset(PointConfiguration point, string path)
+    {
+        var bitOffset = ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path);
+        if (bitOffset is < 0 or > 15)
+        {
+            throw new ZeusException($"{path}.options.bit 必须介于 0 与 15 之间。");
+        }
+
+        return (byte)bitOffset;
+    }
+
+    private static void ValidateBitUsage(PointConfiguration point, FinsDataType dataType, string path)
+    {
+        if (dataType == FinsDataType.Bit)
+        {
+            ReadBitOffset(point, path);
+            return;
+        }
+
+        if (ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path) != 0)
+        {
+            throw new ZeusException($"{path}.options.bit 只能用于 FINS bit 点。");
+        }
+    }
 
     private static FinsDataType ParseDataType(string? value, string path)
         => ZeusConfigurationText.Normalize(value) switch

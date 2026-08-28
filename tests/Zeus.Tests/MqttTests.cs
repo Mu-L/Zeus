@@ -33,6 +33,51 @@ public sealed class MqttTests
     }
 
     [Fact]
+    public async Task Client_WaitForMessageDoesNotDropBufferedNonMatches()
+    {
+        var broker = new MqttBrokerResponder();
+        await using var host = ZeusHost.Create(builder => builder.AddVirtualChannel("mqtt-link", broker));
+        await host.StartAsync();
+        await using var client = new MqttClient(host.Channels.Get("mqtt-link"), new MqttOptions { ClientId = "filter-client" });
+
+        await client.ConnectAsync();
+        await client.SubscribeAsync("factory/#");
+        await client.PublishAsync("factory/first", "first"u8.ToArray());
+        await client.PublishAsync("factory/second", "second"u8.ToArray());
+
+        var second = await client.WaitForMessageAsync("factory/second").WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal("second", Encoding.UTF8.GetString(second.Payload));
+
+        var first = await client.WaitForMessageAsync("factory/first").WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal("first", Encoding.UTF8.GetString(first.Payload));
+    }
+
+    [Fact]
+    public async Task Client_WakesConcurrentMessageWaiters()
+    {
+        var broker = new MqttBrokerResponder();
+        await using var host = ZeusHost.Create(builder => builder.AddVirtualChannel("mqtt-link", broker));
+        await host.StartAsync();
+        await using var client = new MqttClient(host.Channels.Get("mqtt-link"), new MqttOptions { ClientId = "parallel-wait-client" });
+
+        await client.ConnectAsync();
+        await client.SubscribeAsync("factory/#");
+
+        var firstTask = client.WaitForMessageAsync("factory/first");
+        var secondTask = client.WaitForMessageAsync("factory/second");
+        await Task.Delay(50);
+
+        await client.PublishAsync("factory/first", "first"u8.ToArray());
+        await client.PublishAsync("factory/second", "second"u8.ToArray());
+
+        var first = await firstTask.WaitAsync(TimeSpan.FromSeconds(3));
+        var second = await secondTask.WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Equal("first", Encoding.UTF8.GetString(first.Payload));
+        Assert.Equal("second", Encoding.UTF8.GetString(second.Payload));
+    }
+
+    [Fact]
     public async Task Client_SupportsQosOneQosTwoAndUnsubscribe()
     {
         var broker = new MqttBrokerResponder();

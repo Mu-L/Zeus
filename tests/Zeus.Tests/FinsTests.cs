@@ -148,6 +148,88 @@ public sealed class FinsTests
     }
 
     /// <summary>
+    /// JSON 位偏移必须在转换成 byte 之前校验，避免 256 等值回绕成 0。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsOutOfRangeFinsBitOffset()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "fins-link", "type": "virtual", "options": { "responder": "fins", "transport": "udp" } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "fins-link",
+                  "type": "omron-fins",
+                  "options": { "transport": "udp", "sourceNode": 10, "destinationNode": 1 },
+                  "points": [
+                    { "name": "bad-bit", "options": { "area": "cio", "address": 10, "bit": 256, "dataType": "bit" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "FINS bit 配置"));
+        Assert.Contains("bit", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// JSON 中 FINS byte 选项必须在转换前校验，避免节点号等值回绕。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsOutOfRangeFinsByteOption()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "fins-link", "type": "virtual", "options": { "responder": "fins", "transport": "udp" } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "fins-link",
+                  "type": "omron-fins",
+                  "options": { "transport": "udp", "sourceNode": 10, "destinationNode": 300 },
+                  "points": []
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "FINS byte 配置"));
+        Assert.Contains("destinationNode", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// FINS 直接 API 应拒绝与点表层一致的非法位偏移和内存区类型组合，避免静默读写错误地址。
+    /// </summary>
+    [Fact]
+    public async Task FinsDevice_RejectsInvalidDirectAddressShape()
+    {
+        var memory = new FinsSlaveMemory();
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddVirtualChannel("fins-link", new FinsSlaveResponder(FinsTransport.Udp, memory));
+            builder.AddOmronFins("plc", "fins-link", FinsTransport.Udp, new FinsOptions { SourceNode = 10, DestinationNode = 1 });
+        });
+
+        await host.StartAsync();
+        var plc = host.Devices.Get<FinsDevice>("plc");
+
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadCioBitsAsync(20, 16, 1));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.WriteCioBitsAsync(20, 16, [true]));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadBitsAsync(FinsMemoryAreaCode.CioWord, 20, 0, 1));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadWordsAsync(FinsMemoryAreaCode.CioBit, 20, 1));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadMultipleAsync([
+            new FinsMemoryAddress(FinsMemoryAreaCode.CioBit, 20, 16),
+            new FinsMemoryAddress(FinsMemoryAreaCode.CioWord, 20, 1)
+        ]));
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 FINS 结束码异常。
     /// </summary>
     [Fact]

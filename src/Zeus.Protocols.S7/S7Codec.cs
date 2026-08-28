@@ -5,6 +5,7 @@ namespace Zeus;
 /// </summary>
 internal static class S7Codec
 {
+    private const int MaxByteOffset = 0x1FFFFF;
     private const byte TpktVersion = 0x03;
     private const byte CotpData = 0xF0;
     private const byte CotpConnectionRequest = 0xE0;
@@ -368,7 +369,40 @@ internal static class S7Codec
 
     public static S7VariableAddress CreateAddress(S7Area area, int dbNumber, int byteOffset, int bitOffset, S7DataType dataType)
     {
+        ValidateAddress(area, dbNumber, byteOffset, bitOffset, dataType);
         return new S7VariableAddress(area, dbNumber, byteOffset, bitOffset, dataType, GetByteLength(dataType));
+    }
+
+    private static void ValidateAddress(S7Area area, int dbNumber, int byteOffset, int bitOffset, S7DataType dataType)
+    {
+        if (byteOffset is < 0 or > MaxByteOffset)
+        {
+            throw new ZeusProtocolException($"S7 字节地址必须介于 0 与 {MaxByteOffset} 之间，当前为 {byteOffset}。");
+        }
+
+        if (area == S7Area.DataBlock)
+        {
+            if (dbNumber is <= 0 or > ushort.MaxValue)
+            {
+                throw new ZeusProtocolException("S7 DB 区 dbNumber 必须介于 1 与 65535 之间。");
+            }
+        }
+        else if (dbNumber != 0)
+        {
+            throw new ZeusProtocolException("S7 非 DB 区 dbNumber 必须为 0。");
+        }
+
+        if (dataType == S7DataType.Bool)
+        {
+            if (bitOffset is < 0 or > 7)
+            {
+                throw new ZeusProtocolException($"S7 Bool 位偏移必须介于 0 与 7 之间，当前为 {bitOffset}。");
+            }
+        }
+        else if (bitOffset != 0)
+        {
+            throw new ZeusProtocolException("S7 非 Bool 类型 bitOffset 必须为 0。");
+        }
     }
 
     public static int GetByteLength(S7DataType dataType)

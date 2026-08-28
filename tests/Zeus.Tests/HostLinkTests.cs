@@ -105,6 +105,35 @@ public sealed class HostLinkTests
     }
 
     /// <summary>
+    /// JSON 位偏移必须在转换成 byte 之前校验，避免 256 等值回绕成 0。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsOutOfRangeHostLinkBitOffset()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "host-link", "type": "virtual", "options": { "responder": "host-link", "unitId": 0 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "host-link",
+                  "type": "omron-host-link",
+                  "options": { "unitId": 0 },
+                  "points": [
+                    { "name": "bad-bit", "options": { "area": "cio", "address": 10, "bit": 256, "dataType": "bit" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "Host Link bit 配置"));
+        Assert.Contains("bit", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 Host Link 结束码异常。
     /// </summary>
     [Fact]

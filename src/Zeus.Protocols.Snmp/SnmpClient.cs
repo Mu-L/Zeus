@@ -138,11 +138,9 @@ public sealed class SnmpClient : IAsyncDisposable
             Task dataPulse;
             lock (_receive.SyncRoot)
             {
-                if (_receive.Bytes.Count > 0)
+                if (SnmpCodec.TryDecodeMessage(_receive.Bytes, out var response, out var consumed))
                 {
-                    var packet = _receive.Bytes.ToArray();
-                    _receive.Bytes.Clear();
-                    var response = SnmpCodec.DecodeMessage(packet);
+                    _receive.Bytes.RemoveRange(0, consumed);
                     if (response.PduType != SnmpCodec.GetResponse)
                     {
                         throw new ZeusProtocolException($"SNMP 响应 PDU 类型 0x{response.PduType:X2} 异常。");

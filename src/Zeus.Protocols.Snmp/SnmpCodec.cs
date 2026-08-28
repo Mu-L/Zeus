@@ -64,6 +64,75 @@ internal static class SnmpCodec
         return new SnmpMessage(community, pduTag, requestId, errorStatus, errorIndex, variables);
     }
 
+    public static bool TryDecodeMessage(IReadOnlyList<byte> buffer, out SnmpMessage message, out int consumed)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        message = null!;
+        consumed = 0;
+
+        if (buffer.Count < 2)
+        {
+            return false;
+        }
+
+        if (buffer[0] != Sequence)
+        {
+            throw new ZeusProtocolException($"SNMP BER 标签 0x{buffer[0]:X2} 异常，期望 0x{Sequence:X2}。");
+        }
+
+        var firstLengthByte = buffer[1];
+        int headerLength;
+        int contentLength;
+        if ((firstLengthByte & 0x80) == 0)
+        {
+            headerLength = 2;
+            contentLength = firstLengthByte;
+        }
+        else
+        {
+            var lengthByteCount = firstLengthByte & 0x7F;
+            if (lengthByteCount is 0 or > 4)
+            {
+                throw new ZeusProtocolException("SNMP BER 长度字段无效。");
+            }
+
+            if (buffer.Count < 2 + lengthByteCount)
+            {
+                return false;
+            }
+
+            long length = 0;
+            for (var i = 0; i < lengthByteCount; i++)
+            {
+                length = (length << 8) | buffer[2 + i];
+            }
+
+            if (length > ProtocolReceiveBuffer.DefaultMaxBytes)
+            {
+                throw new ZeusProtocolException($"SNMP BER 长度字段异常：{length}。");
+            }
+
+            headerLength = 2 + lengthByteCount;
+            contentLength = (int)length;
+        }
+
+        var totalLength = headerLength + contentLength;
+        if (buffer.Count < totalLength)
+        {
+            return false;
+        }
+
+        var packet = new byte[totalLength];
+        for (var i = 0; i < totalLength; i++)
+        {
+            packet[i] = buffer[i];
+        }
+
+        message = DecodeMessage(packet);
+        consumed = totalLength;
+        return true;
+    }
+
     public static string NormalizeOid(string oid)
     {
         if (string.IsNullOrWhiteSpace(oid))

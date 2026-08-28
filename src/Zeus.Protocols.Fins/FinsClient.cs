@@ -83,7 +83,7 @@ public sealed class FinsClient : IAsyncDisposable
         ushort count,
         CancellationToken cancellationToken = default)
     {
-        var request = FinsCodec.BuildMemoryAreaReadRequest(area, address, 0, count);
+        var request = FinsCodec.BuildMemoryAreaReadRequest(area, address, 0, count, FinsMemoryAreaKind.Word);
         var response = await ExecuteAsync(FinsCodec.MemoryAreaRead, request, cancellationToken).ConfigureAwait(false);
         return FinsCodec.DecodeWordRead(response, count);
     }
@@ -111,7 +111,7 @@ public sealed class FinsClient : IAsyncDisposable
         ushort count,
         CancellationToken cancellationToken = default)
     {
-        var request = FinsCodec.BuildMemoryAreaReadRequest(area, address, bitOffset, count);
+        var request = FinsCodec.BuildMemoryAreaReadRequest(area, address, bitOffset, count, FinsMemoryAreaKind.Bit);
         var response = await ExecuteAsync(FinsCodec.MemoryAreaRead, request, cancellationToken).ConfigureAwait(false);
         return FinsCodec.DecodeBitRead(response, count);
     }

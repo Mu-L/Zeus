@@ -22,6 +22,17 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
         {
             throw new ZeusException($"{path}.options.timeoutMilliseconds 必须大于 0。");
         }
+
+        for (var i = 0; i < device.Points.Count; i++)
+        {
+            var point = device.Points[i];
+            var pointPath = $"{path}.points[{i}]";
+            ZeusConfigurationText.EnsureName(point.Name, pointPath);
+            var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt", pointPath));
+            ValidateArea(area, pointPath);
+            ReadAddress(point, area, pointPath);
+            ValidateBitUsage(point, ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath)), pointPath);
+        }
     }
 
     /// <inheritdoc />
@@ -69,8 +80,10 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
             {
                 var area = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "area", "dt"));
                 var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
-                var address = ZeusConfigurationOptions.GetInt32(point.Options, "address");
-                var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+                ValidateArea(area, $"point {point.Name}");
+                ValidateBitUsage(point, dataType, $"point {point.Name}");
+                var address = ReadAddress(point, area, $"point {point.Name}");
+                var bitOffset = ReadBitOffset(point, $"point {point.Name}");
                 var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 if (area is "x" or "y" or "r" or "l")
                 {
@@ -79,7 +92,8 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                         "x" => MewtocolContactArea.ExternalInput,
                         "y" => MewtocolContactArea.ExternalOutput,
                         "l" => MewtocolContactArea.LinkRelay,
-                        _ => MewtocolContactArea.InternalRelay
+                        "r" => MewtocolContactArea.InternalRelay,
+                        _ => throw new ZeusException($"MEWTOCOL area「{area}」不受支持。")
                     };
                     if (dataType is "bit")
                     {
@@ -98,9 +112,10 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                 {
                     var data = area switch
                     {
+                        "dt" => MewtocolDataArea.DataRegister,
                         "ld" => MewtocolDataArea.LinkDataRegister,
                         "fl" => MewtocolDataArea.FileRegister,
-                        _ => MewtocolDataArea.DataRegister
+                        _ => throw new ZeusException($"MEWTOCOL area「{area}」不受支持。")
                     };
                     if (dataType is "bit")
                     {
@@ -122,4 +137,58 @@ public sealed class MewtocolJsonBinder : IZeusJsonBinder
                 }
             }
         };
+
+    private static void ValidateArea(string area, string path)
+    {
+        if (area is not ("dt" or "ld" or "fl" or "x" or "y" or "r" or "l"))
+        {
+            throw new ZeusException($"{path}.options.area「{area}」不受支持。MEWTOCOL 可选 dt、ld、fl、x、y、r、l。");
+        }
+    }
+
+    private static int ReadAddress(PointConfiguration point, string area, string path)
+    {
+        var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+        if (area is "x" or "y" or "r" or "l")
+        {
+            if (address is < 0 or > 9999)
+            {
+                throw new ZeusException($"{path}.options.address 必须介于 0 与 9999 之间。");
+            }
+
+            return address;
+        }
+
+        if (address is < 0 or > 99999)
+        {
+            throw new ZeusException($"{path}.options.address 必须介于 0 与 99999 之间。");
+        }
+
+        return address;
+    }
+
+    private static byte ReadBitOffset(PointConfiguration point, string path)
+    {
+        var bitOffset = ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path);
+        if (bitOffset is < 0 or > 15)
+        {
+            throw new ZeusException($"{path}.options.bit 必须介于 0 与 15 之间。");
+        }
+
+        return (byte)bitOffset;
+    }
+
+    private static void ValidateBitUsage(PointConfiguration point, string dataType, string path)
+    {
+        if (dataType is "bit")
+        {
+            ReadBitOffset(point, path);
+            return;
+        }
+
+        if (ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path) != 0)
+        {
+            throw new ZeusException($"{path}.options.bit 只能用于 MEWTOCOL bit 点。");
+        }
+    }
 }

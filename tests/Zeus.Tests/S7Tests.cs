@@ -62,6 +62,25 @@ public sealed class S7Tests
         Assert.Equal((byte)3, memory.Markers[22]);
     }
 
+    [Fact]
+    public async Task S7Device_RejectsInvalidDirectAddresses()
+    {
+        await using var host = ZeusHost.Create(builder =>
+        {
+            builder.AddVirtualChannel("plc-link", new S7SlaveResponder());
+            builder.AddSiemensS7("plc", "plc-link");
+        });
+
+        await host.StartAsync();
+        var plc = host.Devices.Get<S7Device>("plc");
+
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadBoolAsync(S7Area.Merkers, 0, 8));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadBoolAsync(S7Area.Merkers, 0, -1));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadByteAsync(S7Area.Merkers, 0, dbNumber: 1));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadByteAsync(S7Area.DataBlock, 0, dbNumber: 0));
+        await Assert.ThrowsAsync<ZeusProtocolException>(() => plc.ReadByteAsync(S7Area.Merkers, -1));
+    }
+
     /// <summary>
     /// S7 点表应能周期采集并按点名写回 DB 与 M 区。
     /// </summary>

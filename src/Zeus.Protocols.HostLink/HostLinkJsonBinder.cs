@@ -32,6 +32,10 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             {
                 throw new ZeusException($"{pointPath}.options.area 必须指定。");
             }
+
+            ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area", path: pointPath));
+            ReadAddress(point, pointPath);
+            ValidateBitUsage(point, ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word", pointPath)), pointPath);
         }
     }
 
@@ -86,8 +90,9 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             {
                 var area = ParseArea(ZeusConfigurationOptions.GetString(point.Options, "area"));
                 var dataType = ZeusConfigurationText.Normalize(ZeusConfigurationOptions.GetString(point.Options, "dataType", "word"));
-                var address = (ushort)ZeusConfigurationOptions.GetInt32(point.Options, "address");
-                var bitOffset = (byte)ZeusConfigurationOptions.GetInt32(point.Options, "bit");
+                ValidateBitUsage(point, dataType, $"point {point.Name}");
+                var address = ReadAddress(point, $"point {point.Name}");
+                var bitOffset = ReadBitOffset(point, $"point {point.Name}");
                 var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale");
                 if (dataType is "bit")
                 {
@@ -119,4 +124,40 @@ public sealed class HostLinkJsonBinder : IZeusJsonBinder
             "dm" => HostLinkArea.DataMemory,
             _ => throw new ZeusException($"Host Link area「{value}」不受支持。")
         };
+
+    private static ushort ReadAddress(PointConfiguration point, string path)
+    {
+        var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+        if (address is < 0 or > 9999)
+        {
+            throw new ZeusException($"{path}.options.address 必须介于 0 与 9999 之间。");
+        }
+
+        return (ushort)address;
+    }
+
+    private static byte ReadBitOffset(PointConfiguration point, string path)
+    {
+        var bitOffset = ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path);
+        if (bitOffset is < 0 or > 15)
+        {
+            throw new ZeusException($"{path}.options.bit 必须介于 0 与 15 之间。");
+        }
+
+        return (byte)bitOffset;
+    }
+
+    private static void ValidateBitUsage(PointConfiguration point, string dataType, string path)
+    {
+        if (dataType is "bit")
+        {
+            ReadBitOffset(point, path);
+            return;
+        }
+
+        if (ZeusConfigurationOptions.GetInt32(point.Options, "bit", path: path) != 0)
+        {
+            throw new ZeusException($"{path}.options.bit 只能用于 Host Link bit 点。");
+        }
+    }
 }

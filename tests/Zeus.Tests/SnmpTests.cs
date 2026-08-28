@@ -28,6 +28,23 @@ public sealed class SnmpTests
     }
 
     [Fact]
+    public async Task Client_WaitsForCompleteBerPacketAcrossTcpChunks()
+    {
+        var memory = new SnmpAgentMemory();
+        memory.SetGauge32("1.3.6.1.4.1.55555.1.3.0", 321, writable: true);
+        await using var channel = new SegmentedResponseChannel(
+            new SnmpAgentResponder(memory),
+            firstChunkLength: 3);
+        await channel.OpenAsync();
+        await using var client = new SnmpClient(channel);
+
+        var value = await client.GetAsync("1.3.6.1.4.1.55555.1.3.0").WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Equal(SnmpDataType.Gauge32, value.DataType);
+        Assert.Equal((uint)321, value.Value);
+    }
+
+    [Fact]
     public async Task Device_PollsAndWritesOidPoints()
     {
         var memory = new SnmpAgentMemory();
@@ -122,5 +139,48 @@ public sealed class SnmpTests
         }
 
         throw new TimeoutException($"等待点 {name} 超时。");
+    }
+
+    private sealed class SegmentedResponseChannel(IVirtualResponder responder, int firstChunkLength) : ChannelBase("snmp-segmented", null)
+    {
+        protected override Task OpenCoreAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        protected override Task CloseCoreAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        protected override async Task WriteCoreAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
+        {
+            var reply = await responder.RespondAsync(buffer, cancellationToken).ConfigureAwait(false);
+            if (reply is null || reply.Value.IsEmpty)
+            {
+                return;
+            }
+
+            var bytes = reply.Value.ToArray();
+            if (bytes.Length == 1)
+            {
+                PublishData(bytes);
+                return;
+            }
+
+            var split = Math.Clamp(firstChunkLength, 1, bytes.Length - 1);
+            PublishData(bytes.AsSpan(0, split));
+            _ = PublishRemainderAsync(bytes[split..]);
+        }
+
+        private async Task PublishRemainderAsync(byte[] data)
+        {
+            try
+            {
+                await Task.Delay(50).ConfigureAwait(false);
+                if (State == ChannelState.Open)
+                {
+                    PublishData(data);
+                }
+            }
+            catch
+            {
+                // Test helper: late publish errors should not escape the background task.
+            }
+        }
     }
 }

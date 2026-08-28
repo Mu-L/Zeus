@@ -209,10 +209,16 @@ internal static class FinsCodec
         return ((byte)ReadUInt32BigEndian(payload.Slice(0, 4)), (byte)ReadUInt32BigEndian(payload.Slice(4, 4)));
     }
 
-    public static byte[] BuildMemoryAreaReadRequest(FinsMemoryAreaCode area, ushort address, byte bitOffset, ushort count)
+    public static byte[] BuildMemoryAreaReadRequest(
+        FinsMemoryAreaCode area,
+        ushort address,
+        byte bitOffset,
+        ushort count,
+        FinsMemoryAreaKind expectedKind)
     {
         EnsureCount(count, "FINS Memory Area Read");
-        ValidateAreaKind(area, area.Kind);
+        ValidateAreaKind(area, expectedKind);
+        ValidateBitOffset(area, bitOffset);
         var data = new byte[6];
         data[0] = area.Code;
         WriteUInt16BigEndian(data.AsSpan(1, 2), address);
@@ -229,6 +235,7 @@ internal static class FinsCodec
     {
         ArgumentNullException.ThrowIfNull(words);
         ValidateAreaKind(area, FinsMemoryAreaKind.Word);
+        ValidateBitOffset(area, bitOffset);
         EnsureCount(words.Count, "FINS Memory Area Write");
         var data = new byte[6 + (words.Count * 2)];
         data[0] = area.Code;
@@ -251,6 +258,7 @@ internal static class FinsCodec
     {
         ArgumentNullException.ThrowIfNull(bits);
         ValidateAreaKind(area, FinsMemoryAreaKind.Bit);
+        ValidateBitOffset(area, bitOffset);
         EnsureCount(bits.Count, "FINS Memory Area Write");
         var data = new byte[6 + bits.Count];
         data[0] = area.Code;
@@ -268,6 +276,7 @@ internal static class FinsCodec
     public static byte[] BuildMemoryAreaFillRequest(FinsMemoryAreaCode area, ushort address, byte bitOffset, ushort count, ushort value)
     {
         ValidateAreaKind(area, FinsMemoryAreaKind.Word);
+        ValidateBitOffset(area, bitOffset);
         EnsureCount(count, "FINS Memory Area Fill");
         var data = new byte[8];
         data[0] = area.Code;
@@ -289,6 +298,7 @@ internal static class FinsCodec
         var data = new byte[addresses.Count * 4];
         for (var i = 0; i < addresses.Count; i++)
         {
+            ValidateBitOffset(addresses[i].Area, addresses[i].BitOffset);
             var offset = i * 4;
             data[offset] = addresses[i].Area.Code;
             WriteUInt16BigEndian(data.AsSpan(offset + 1, 2), addresses[i].WordAddress);
@@ -519,6 +529,24 @@ internal static class FinsCodec
         if (area.Kind != expected)
         {
             throw new ZeusProtocolException($"FINS 内存区 {area} 不是 {expected} 区。");
+        }
+    }
+
+    private static void ValidateBitOffset(FinsMemoryAreaCode area, byte bitOffset)
+    {
+        if (area.IsBit)
+        {
+            if (bitOffset > 15)
+            {
+                throw new ZeusProtocolException($"FINS 位偏移必须介于 0 与 15 之间，当前为 {bitOffset}。");
+            }
+
+            return;
+        }
+
+        if (bitOffset != 0)
+        {
+            throw new ZeusProtocolException($"FINS 字区 {area} 的位偏移必须为 0，当前为 {bitOffset}。");
         }
     }
 

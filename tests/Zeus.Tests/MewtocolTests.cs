@@ -107,6 +107,35 @@ public sealed class MewtocolTests
     }
 
     /// <summary>
+    /// JSON 位偏移必须在转换成 byte 之前校验，避免 256 等值回绕成 0。
+    /// </summary>
+    [Fact]
+    public void AddJson_RejectsOutOfRangeMewtocolBitOffset()
+    {
+        const string json = """
+            {
+              "channels": [
+                { "name": "mewtocol", "type": "virtual", "options": { "responder": "mewtocol", "unitId": 1 } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "mewtocol",
+                  "type": "panasonic-mewtocol",
+                  "options": { "unitId": 1 },
+                  "points": [
+                    { "name": "bad-bit", "options": { "area": "r", "address": 10, "bit": 256, "dataType": "bit" } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MEWTOCOL bit 配置"));
+        Assert.Contains("bit", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 地址越界应暴露为 MEWTOCOL 错误码异常。
     /// </summary>
     [Fact]

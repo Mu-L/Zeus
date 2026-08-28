@@ -14,7 +14,7 @@ public sealed class MqttClient : IAsyncDisposable
     private readonly Dictionary<ushort, MqttPublishPacket> _incomingExactlyOnce = [];
     private readonly Queue<byte[]> _pendingControlWrites = [];
     private readonly Queue<MqttMessage> _pendingEvents = [];
-    private TaskCompletionSource<bool>? _dataPulse;
+    private readonly List<TaskCompletionSource<bool>> _dataPulses = [];
     private CancellationTokenSource? _keepAliveCts;
     private CancellationTokenSource? _reconnectCts;
     private Task? _keepAliveTask;
@@ -247,19 +247,11 @@ public sealed class MqttClient : IAsyncDisposable
             lock (_bufferLock)
             {
                 DrainPublishPacketsLocked();
-                while (_messages.Count > 0)
-                {
-                    var message = _messages.Dequeue();
-                    if (topicFilter is null || MqttCodec.TopicMatches(topicFilter, message.Topic))
-                    {
-                        matched = message;
-                        break;
-                    }
-                }
+                matched = DequeueMatchingMessageLocked(topicFilter);
 
                 if (matched is null)
                 {
-                    pulse = _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    pulse = AddDataPulseLocked();
                 }
 
                 controlWrites = DequeueControlWritesLocked();
@@ -277,7 +269,14 @@ public sealed class MqttClient : IAsyncDisposable
                 continue;
             }
 
-            await pulse.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await pulse.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                RemoveDataPulse(pulse);
+            }
         }
     }
 
@@ -387,7 +386,7 @@ public sealed class MqttClient : IAsyncDisposable
                 }
                 else
                 {
-                    pulse = _dataPulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    pulse = AddDataPulseLocked();
                 }
 
                 controlWrites = DequeueControlWritesLocked();
@@ -412,6 +411,10 @@ public sealed class MqttClient : IAsyncDisposable
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new ZeusProtocolException($"通道 {_channel.Name} 在 {_timeout.TotalMilliseconds:0} ms 内未收到完整 MQTT {operation} 应答。");
+            }
+            finally
+            {
+                RemoveDataPulse(pulse);
             }
         }
     }
@@ -520,6 +523,80 @@ public sealed class MqttClient : IAsyncDisposable
         }
     }
 
+    private MqttMessage? DequeueMatchingMessageLocked(string? topicFilter)
+    {
+        if (_messages.Count == 0)
+        {
+            return null;
+        }
+
+        if (topicFilter is null)
+        {
+            return _messages.Dequeue();
+        }
+
+        MqttMessage? matched = null;
+        var count = _messages.Count;
+        for (var i = 0; i < count; i++)
+        {
+            var message = _messages.Dequeue();
+            if (matched is null && MqttCodec.TopicMatches(topicFilter, message.Topic))
+            {
+                matched = message;
+                continue;
+            }
+
+            _messages.Enqueue(message);
+        }
+
+        return matched;
+    }
+
+    private TaskCompletionSource<bool> AddDataPulseLocked()
+    {
+        var pulse = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _dataPulses.Add(pulse);
+        return pulse;
+    }
+
+    private void RemoveDataPulse(TaskCompletionSource<bool> pulse)
+    {
+        lock (_bufferLock)
+        {
+            _dataPulses.Remove(pulse);
+        }
+    }
+
+    private void PulseDataWaitersLocked()
+    {
+        if (_dataPulses.Count == 0)
+        {
+            return;
+        }
+
+        var pulses = _dataPulses.ToArray();
+        _dataPulses.Clear();
+        foreach (var pulse in pulses)
+        {
+            pulse.TrySetResult(true);
+        }
+    }
+
+    private void FailDataWaitersLocked(Exception exception)
+    {
+        if (_dataPulses.Count == 0)
+        {
+            return;
+        }
+
+        var pulses = _dataPulses.ToArray();
+        _dataPulses.Clear();
+        foreach (var pulse in pulses)
+        {
+            pulse.TrySetException(exception);
+        }
+    }
+
     private List<byte[]> DequeueControlWritesLocked()
     {
         if (_pendingControlWrites.Count == 0)
@@ -565,8 +642,7 @@ public sealed class MqttClient : IAsyncDisposable
         {
             if (!ProtocolReceiveBuffer.TryAppend(_buffer, e.Data.Span, _options.MaximumPacketSize))
             {
-                _dataPulse?.TrySetException(ProtocolReceiveBuffer.Overflow(_channel.Name, _options.MaximumPacketSize));
-                _dataPulse = null;
+                FailDataWaitersLocked(ProtocolReceiveBuffer.Overflow(_channel.Name, _options.MaximumPacketSize));
                 controlWrites = DequeueControlWritesLocked();
                 events = DequeueEventsLocked();
             }
@@ -574,8 +650,7 @@ public sealed class MqttClient : IAsyncDisposable
             {
                 TouchActivity();
                 DrainUnsolicitedPacketsLocked();
-                _dataPulse?.TrySetResult(true);
-                _dataPulse = null;
+                PulseDataWaitersLocked();
                 controlWrites = DequeueControlWritesLocked();
                 events = DequeueEventsLocked();
             }
@@ -606,8 +681,7 @@ public sealed class MqttClient : IAsyncDisposable
             lock (_bufferLock)
             {
                 _buffer.Clear();
-                _dataPulse?.TrySetException(new ZeusProtocolException($"通道 {_channel.Name} 已变为 {e.Current}，未完成的 MQTT 请求已取消。"));
-                _dataPulse = null;
+                FailDataWaitersLocked(new ZeusProtocolException($"通道 {_channel.Name} 已变为 {e.Current}，未完成的 MQTT 请求已取消。"));
             }
 
             return;
