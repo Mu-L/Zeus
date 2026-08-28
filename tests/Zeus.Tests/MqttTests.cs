@@ -280,6 +280,31 @@ public sealed class MqttTests
         Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("\"mqttPassword\": \"secret\"", "Password")]
+    [InlineData("\"mqttWillTopic\": \"factory/offline\"", "WillTopic")]
+    [InlineData("\"mqttWillRetain\": true", "WillRetain")]
+    [InlineData("\"mqttMaximumPacketSize\": 1", "MaximumPacketSize")]
+    [InlineData("\"mqttKeepAliveSeconds\": 70000", "mqttKeepAliveSeconds")]
+    public void Configuration_RejectsInvalidMqttDeviceOptions(string deviceOptions, string expectedMessage)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "mqtt-link", "type": "virtual", "options": { "responder": "mqtt" } }],
+              "devices": [{
+                "name": "gateway",
+                "channel": "mqtt-link",
+                "type": "mqtt",
+                "options": { {{deviceOptions}} },
+                "points": [{ "name": "setpoint", "options": { "topic": "factory/setpoint", "dataType": "double" } }]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "MQTT 配置"));
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
