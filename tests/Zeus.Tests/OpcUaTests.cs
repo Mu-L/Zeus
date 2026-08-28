@@ -188,6 +188,30 @@ public sealed class OpcUaTests
         Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("temperature", "ns=2;s=OtherTemperature", "点名")]
+    [InlineData("backupTemperature", "ns=2;s=Temperature", "NodeId")]
+    public void AddJson_RejectsDuplicateOpcUaPointDefinitions(string secondName, string secondNodeId, string expectedMessage)
+    {
+        var json = $$"""
+            {
+              "channels": [{ "name": "opcua-link", "type": "virtual", "options": { "responder": "opcua" } }],
+              "devices": [{
+                "name": "server",
+                "channel": "opcua-link",
+                "type": "opcua",
+                "points": [
+                  { "name": "temperature", "options": { "nodeId": "ns=2;s=Temperature", "dataType": "double" } },
+                  { "name": "{{secondName}}", "options": { "nodeId": "{{secondNodeId}}", "dataType": "double" } }
+                ]
+              }]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "OPC UA 点表配置"));
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void NodeId_RoundTripsCommonForms()
     {

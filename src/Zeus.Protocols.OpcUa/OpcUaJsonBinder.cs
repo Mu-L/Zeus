@@ -22,19 +22,12 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             throw new ZeusException($"{path}.options.opcUaRequestedSessionTimeout 必须大于 0。");
         }
 
-        foreach (var point in device.Points)
+        var pointMap = new OpcUaPointMap();
+        for (var i = 0; i < device.Points.Count; i++)
         {
-            var nodeId = ZeusConfigurationOptions.GetString(point.Options, "nodeId");
-            if (string.IsNullOrWhiteSpace(nodeId))
-            {
-                throw new ZeusException($"点 {point.Name}.options.nodeId 不能为空。");
-            }
-
-            var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"点 {point.Name}.options.dataType");
-            ValidateNumericOptions(point, dataType, $"点 {point.Name}");
-
-            // 与原先装载器一致：非法 NodeId 在装载期抛协议异常，而不是拖到采集。
-            _ = OpcUaNodeId.Parse(nodeId);
+            var pointPath = $"{path}.points[{i}]";
+            ZeusConfigurationText.EnsureName(device.Points[i].Name, pointPath);
+            AddPoint(pointMap, device.Points[i], pointPath);
         }
     }
 
@@ -92,14 +85,7 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
         {
             foreach (var point in device.Points)
             {
-                var nodeId = ZeusConfigurationOptions.RequireString(point.Options, "nodeId");
-                var alarmLimits = ZeusConfigurationText.CreateAlarmLimits(point);
-                var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double"), $"point {point.Name}.options.dataType");
-                map.Typed(point.Name, nodeId, dataType, ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale"), alarmLimits);
-                if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable"))
-                {
-                    map.Writable(point.Name);
-                }
+                AddPoint(map, point, $"point {point.Name}");
             }
         };
 
@@ -146,6 +132,20 @@ public sealed class OpcUaJsonBinder : IZeusJsonBinder
             || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
         {
             throw new ZeusException($"{path}.options.lowAlarmLimit 或 highAlarmLimit 只能用于 OPC UA 数值点。");
+        }
+    }
+
+    private static void AddPoint(OpcUaPointMap map, PointConfiguration point, string path)
+    {
+        var nodeId = ZeusConfigurationOptions.RequireString(point.Options, "nodeId", path);
+        var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "double", path), $"{path}.options.dataType");
+        var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+        ValidateNumericOptions(point, dataType, path);
+
+        map.Typed(point.Name, nodeId, dataType, scale, ZeusConfigurationText.CreateAlarmLimits(point));
+        if (ZeusConfigurationOptions.GetBoolean(point.Options, "writable", path: path))
+        {
+            map.Writable(point.Name);
         }
     }
 }
