@@ -22,7 +22,7 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
             var point = device.Points[i];
             var pointPath = $"{path}.points[{i}]";
             ZeusConfigurationText.EnsureName(point.Name, pointPath);
-            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled", pointPath), $"{pointPath}.options.dataType");
+            ValidatePoint(point, pointPath);
         }
     }
 
@@ -112,4 +112,37 @@ public sealed class Iec104JsonBinder : IZeusJsonBinder
             "short-float" => Iec104DataType.ShortFloat,
             _ => throw new ZeusException($"{path}「{value}」不受支持。IEC104 可选 scaled、single-point、normalized、short-float。")
         };
+
+    private static void ValidatePoint(PointConfiguration point, string path)
+    {
+        var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "scaled", path), $"{path}.options.dataType");
+        var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+        if (address is < 0 or > 0xFFFFFF)
+        {
+            throw new ZeusException($"{path}.options.address 必须介于 0 与 16777215 之间。");
+        }
+
+        var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+        if (scale is { } factor && (factor <= 0 || !double.IsFinite(factor)))
+        {
+            throw new ZeusException($"{path}.options.scale 必须是大于 0 的有限数值。");
+        }
+
+        ZeusConfigurationText.ValidatePointAlarms(point, path);
+        if (dataType != Iec104DataType.SinglePoint)
+        {
+            return;
+        }
+
+        if (scale is not null)
+        {
+            throw new ZeusException($"{path}.options.scale 只能用于 IEC104 数值点。");
+        }
+
+        if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+            || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
+        {
+            throw new ZeusException($"{path}.options.lowAlarmLimit 或 highAlarmLimit 只能用于 IEC104 数值点。");
+        }
+    }
 }

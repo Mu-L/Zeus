@@ -22,7 +22,7 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
             var point = device.Points[i];
             var pointPath = $"{path}.points[{i}]";
             ZeusConfigurationText.EnsureName(point.Name, pointPath);
-            ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd", pointPath), $"{pointPath}.options.dataType");
+            ValidatePoint(point, pointPath);
         }
     }
 
@@ -96,4 +96,43 @@ public sealed class Dlt645JsonBinder : IZeusJsonBinder
             "raw" or "raw-bytes" => Dlt645DataType.RawBytes,
             _ => throw new ZeusException($"{path}「{value}」不受支持。DL/T 645 可选 bcd、raw。")
         };
+
+    private static void ValidatePoint(PointConfiguration point, string path)
+    {
+        var dataType = ParseDataType(ZeusConfigurationOptions.GetString(point.Options, "dataType", "bcd", path), $"{path}.options.dataType");
+        var address = ZeusConfigurationOptions.GetInt32(point.Options, "address", path: path);
+        if (address < 0)
+        {
+            throw new ZeusException($"{path}.options.address 必须介于 0 与 2147483647 之间。");
+        }
+
+        var dataLength = ZeusConfigurationOptions.GetInt32(point.Options, "dataLength", 4, path);
+        if (dataLength is < 1 or > 64)
+        {
+            throw new ZeusException($"{path}.options.dataLength 必须介于 1 与 64 之间。");
+        }
+
+        var scale = ZeusConfigurationOptions.GetNullableDouble(point.Options, "scale", path);
+        ZeusConfigurationText.ValidatePointAlarms(point, path);
+        if (dataType == Dlt645DataType.RawBytes)
+        {
+            if (scale is not null)
+            {
+                throw new ZeusException($"{path}.options.scale 只能用于 DL/T 645 bcd 点。");
+            }
+
+            if (ZeusConfigurationOptions.GetNullableDouble(point.Options, "lowAlarmLimit", path) is not null
+                || ZeusConfigurationOptions.GetNullableDouble(point.Options, "highAlarmLimit", path) is not null)
+            {
+                throw new ZeusException($"{path}.options.lowAlarmLimit 或 highAlarmLimit 只能用于 DL/T 645 bcd 点。");
+            }
+
+            return;
+        }
+
+        if (scale is { } factor && (factor <= 0 || !double.IsFinite(factor)))
+        {
+            throw new ZeusException($"{path}.options.scale 必须是大于 0 的有限数值。");
+        }
+    }
 }

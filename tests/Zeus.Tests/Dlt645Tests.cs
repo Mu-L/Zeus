@@ -136,6 +136,37 @@ public sealed class Dlt645Tests
     }
 
     /// <summary>
+    /// JSON 中 DL/T 645 raw 点不能配置只对 BCD 数值有意义的 scale 或报警限。
+    /// </summary>
+    [Theory]
+    [InlineData("\"scale\": 0.1", "scale")]
+    [InlineData("\"highAlarmLimit\": 1", "highAlarmLimit")]
+    public void AddJson_RejectsNumericOptionsOnDlt645RawPoint(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [
+                { "name": "meter-link", "type": "virtual", "options": { "responder": "dlt645", "meterAddress": "000000000001" } }
+              ],
+              "devices": [
+                {
+                  "name": "meter",
+                  "channel": "meter-link",
+                  "type": "dlt645",
+                  "options": { "meterAddress": "000000000001", "wakeUpPreambleCount": 0 },
+                  "points": [
+                    { "name": "raw", "options": { "address": "0x00000000", "dataType": "raw", "dataLength": 2, {{optionJson}} } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "DL/T 645 raw 点配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 未设置的数据项应暴露为 DL/T 645 异常码。
     /// </summary>
     [Fact]

@@ -144,6 +144,37 @@ public sealed class Iec104Tests
         Assert.Contains("dataType", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// JSON 中 IEC104 single-point 不能配置只对数值量有意义的 scale 或报警限。
+    /// </summary>
+    [Theory]
+    [InlineData("\"scale\": 0.1", "scale")]
+    [InlineData("\"highAlarmLimit\": 1", "highAlarmLimit")]
+    public void AddJson_RejectsNumericOptionsOnIec104SinglePoint(string optionJson, string optionName)
+    {
+        var json = $$"""
+            {
+              "channels": [
+                { "name": "iec-link", "type": "virtual", "options": { "responder": "iec104", "commonAddress": 7 } }
+              ],
+              "devices": [
+                {
+                  "name": "station",
+                  "channel": "iec-link",
+                  "type": "iec104",
+                  "options": { "commonAddress": 7 },
+                  "points": [
+                    { "name": "running", "options": { "address": 1, "dataType": "single-point", {{optionJson}} } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "IEC104 single-point 配置"));
+        Assert.Contains(optionName, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<T> WaitForPointAsync<T>(IZeusHost host, string name)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
