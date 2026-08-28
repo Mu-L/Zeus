@@ -111,6 +111,39 @@ public sealed class EtherNetIpTests
     }
 
     /// <summary>
+    /// JSON 中 EtherNet/IP 点位选项应在加载期按点表约束校验，不能等到建点时才失败。
+    /// </summary>
+    [Theory]
+    [InlineData("\"dataType\": \"integer\"", "dataType")]
+    [InlineData("\"dataType\": \"bool\", \"scale\": 0.1", "scale")]
+    [InlineData("\"dataType\": \"bool\", \"highAlarmLimit\": 1", "highAlarmLimit")]
+    [InlineData("\"dataType\": \"int\", \"scale\": 0", "scale")]
+    [InlineData("\"dataType\": \"int\", \"lowAlarmLimit\": 2, \"highAlarmLimit\": 1", "lowAlarmLimit")]
+    public void AddJson_RejectsInvalidEtherNetIpPointOptions(string pointOptions, string expectedMessage)
+    {
+        var json = $$"""
+            {
+              "channels": [
+                { "name": "enip-link", "type": "virtual", "options": { "responder": "ethernet-ip" } }
+              ],
+              "devices": [
+                {
+                  "name": "plc",
+                  "channel": "enip-link",
+                  "type": "ethernet-ip",
+                  "points": [
+                    { "name": "temperature", "options": { "tag": "Temperature", {{pointOptions}} } }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var error = Assert.Throws<ZeusException>(() => ZeusConfigurationLoader.LoadJson(json, "EtherNet/IP 点位配置"));
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 缺失标签应暴露为 CIP 状态异常。
     /// </summary>
     [Fact]
